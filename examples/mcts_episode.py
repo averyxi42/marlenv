@@ -13,6 +13,7 @@ fruit-seeking.
 import argparse
 
 import numpy as np
+from PIL import Image
 
 import gymnasium as gym
 import marlenv  # noqa: F401  (registers the Snake envs)
@@ -108,7 +109,16 @@ def main():
           f'total={returns.sum():.2f}  fruits={fruits.astype(int).tolist()}')
 
     path = base.save_gif(args.out) if args.out else base.save_gif()
-    print(f'wrote {len(base.frame_buffer)} frames to {path}')
+    # the GIF encoder merges consecutive identical frames, and a snake
+    # rotating within its own cells renders identically, so report what
+    # actually landed in the file rather than the buffer length
+    buffered = len(base.frame_buffer)
+    with Image.open(path) as gif:
+        written = gif.n_frames
+    print(f'wrote {written} frames to {path}')
+    if written != buffered:
+        print(f'note: {buffered - written} of {buffered} rendered frames '
+              f'were identical to their predecessor and got merged')
 
 
 if __name__ == '__main__':
