@@ -49,8 +49,8 @@ def _snake_palette(idx):
         'body': base,
         'head': _shade(base, 1.18),
         'tail': _shade(base, 0.72),
-        'edge': _shade(base, 0.42),
-        'scale': _shade(base, 1.32),
+        'joint': _shade(base, 0.62),
+        'edge': _shade(base, 0.38),
     }
 
 
@@ -94,36 +94,29 @@ def _draw_fruit(image, r, c, cell):
           mid:mid + stem] = FRUIT_STEM
 
 
-def _segment_box(cell, pad):
-    return pad, cell - pad
+def _draw_segment(image, r, c, cell, color, link_color, links, pad,
+                  link_pad):
+    """A bead, joined to its neighbours by a narrower, darker link.
 
-
-def _draw_segment(image, r, c, cell, color, links, pad):
-    """A rounded block, bridged towards each linked neighbour."""
+    Two things separate one segment from the next: the link is thinner than
+    the bead, so the background shows through at every joint, and it is
+    darker, so the seam stays visible even where two beads nearly touch.
+    Together they make the body a countable chain rather than a solid bar,
+    without mottling the beads themselves.
+    """
     top, left = r * cell, c * cell
-    lo, hi = _segment_box(cell, pad)
-    image[top + lo:top + hi, left + lo:left + hi] = color
+    lo, hi = pad, cell - pad
+    llo, lhi = link_pad, cell - link_pad
     for dr, dc in links:
         if dr < 0:
-            image[top:top + lo, left + lo:left + hi] = color
+            image[top:top + lo, left + llo:left + lhi] = link_color
         elif dr > 0:
-            image[top + hi:top + cell, left + lo:left + hi] = color
+            image[top + hi:top + cell, left + llo:left + lhi] = link_color
         elif dc < 0:
-            image[top + lo:top + hi, left:left + lo] = color
+            image[top + llo:top + lhi, left:left + lo] = link_color
         elif dc > 0:
-            image[top + lo:top + hi, left + hi:left + cell] = color
-
-
-def _draw_scale(image, r, c, cell, color):
-    """A lighter pip at each body segment's centre.
-
-    Purely decorative, but it marks where one segment ends and the next
-    begins, which is what makes the body's run direction legible.
-    """
-    size = max(1, cell // 5)
-    off = (cell - size) // 2
-    top, left = r * cell + off, c * cell + off
-    image[top:top + size, left:left + size] = color
+            image[top + llo:top + lhi, left + hi:left + cell] = link_color
+    image[top + lo:top + hi, left + lo:left + hi] = color
 
 
 def _draw_eyes(image, r, c, cell, direction):
@@ -159,10 +152,15 @@ def draw_frame(grid, snakes, cell_size=16):
             elif kind == Cell.FRUIT.value:
                 _draw_fruit(image, r, c, cell_size)
 
-    head_pad = max(1, cell_size // 8)
-    body_pad = max(1, cell_size // 6)
-    tail_pad = max(body_pad + 1, cell_size // 3)
-    outline = max(1, cell_size // 16)
+    # beads sit well inside their cell so the background frames every
+    # segment; the head is the widest, the tail the narrowest
+    head_pad = max(1, round(cell_size * 0.18))
+    body_pad = max(1, round(cell_size * 0.22))
+    tail_pad = max(body_pad + 1, round(cell_size * 0.34))
+    # the link is roughly half the bead's width, so every joint visibly
+    # pinches and the segments stay countable
+    link_pad = max(body_pad + 1, round(cell_size * 0.38))
+    outline = max(1, cell_size // 14)
 
     for snake in snakes:
         if not snake.alive:
@@ -192,22 +190,22 @@ def draw_frame(grid, snakes, cell_size=16):
         # stay separated from each other and from the background
         for position, (r, c) in enumerate(coords):
             _draw_segment(image, r, c, cell_size, palette['edge'],
-                          links_for(position, r, c),
-                          max(0, pad_for(position) - outline))
+                          palette['edge'], links_for(position, r, c),
+                          max(0, pad_for(position) - outline),
+                          max(0, link_pad - outline))
 
         for position, (r, c) in enumerate(coords):
             links = links_for(position, r, c)
             if position == 0:
                 _draw_segment(image, r, c, cell_size, palette['head'],
-                              links, head_pad)
+                              palette['joint'], links, head_pad, link_pad)
                 _draw_eyes(image, r, c, cell_size, snake.direction.value)
             elif position == last:
                 _draw_segment(image, r, c, cell_size, palette['tail'],
-                              links, tail_pad)
+                              palette['joint'], links, tail_pad, link_pad)
             else:
                 _draw_segment(image, r, c, cell_size, palette['body'],
-                              links, body_pad)
-                _draw_scale(image, r, c, cell_size, palette['scale'])
+                              palette['joint'], links, body_pad, link_pad)
     return image
 
 
