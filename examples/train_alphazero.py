@@ -46,6 +46,11 @@ def parse_args():
     p.add_argument('--height', type=int, default=11)
     p.add_argument('--width', type=int, default=11)
     p.add_argument('--num-fruits', type=int, default=3)
+    p.add_argument('--obstacle-density', type=float, default=0.0,
+                   help='fraction of interior cells walled off')
+    p.add_argument('--grid-size-range', type=int, nargs=2, default=None,
+                   metavar=('LOW', 'HIGH'),
+                   help='sample a square board size per episode')
     p.add_argument('--lr', type=float, default=2e-3)
     p.add_argument('--channels', type=int, default=32)
     p.add_argument('--blocks', type=int, default=2)
@@ -62,7 +67,10 @@ def parse_args():
                    help='also keep a permanent snapshot this often '
                         '(0 disables)')
     p.add_argument('--resume', default=None,
-                   help='checkpoint to resume weights and optimiser from')
+                   help='continue a run: weights, optimiser and iteration')
+    p.add_argument('--warm-start', default=None,
+                   help='start a new run from existing weights only, with a '
+                        'fresh optimiser and iteration count')
     p.add_argument('--log', default=None, help='JSON lines metrics path')
     return p.parse_args()
 
@@ -84,7 +92,11 @@ def save_checkpoint(path, net, optimizer, args, iteration, best):
 def make_env(args, num_snakes):
     return gym.make('Snake-v1', height=args.height, width=args.width,
                     num_snakes=num_snakes, num_fruits=args.num_fruits,
-                    reward_dict=REWARD_DICT, disable_env_checker=True)
+                    reward_dict=REWARD_DICT,
+                    obstacle_density=args.obstacle_density,
+                    grid_size_range=(tuple(args.grid_size_range)
+                                     if args.grid_size_range else None),
+                    disable_env_checker=True)
 
 
 def evaluate(args, evaluator, num_snakes, seed_offset=0):
@@ -135,6 +147,14 @@ def main():
 
     start_iteration = 1
     best_eval = -float('inf')
+    if args.warm_start:
+        # weights only: the optimiser state and the best-so-far belong to the
+        # previous task, and the replay buffer starts empty either way
+        state = torch.load(args.warm_start, map_location=device,
+                           weights_only=False)
+        net.load_state_dict(state['model'])
+        print(f'warm started from {args.warm_start} '
+              f'(trained {state.get("iteration", "?")} iterations)')
     if args.resume:
         state = torch.load(args.resume, map_location=device,
                            weights_only=False)

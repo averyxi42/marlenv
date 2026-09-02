@@ -12,7 +12,8 @@ from gymnasium.utils import seeding
 
 from marlenv.core.grid_util import (
     random_empty_coords, draw, make_grid, dfs_sweep_empty,
-    rgb_from_grid, image_from_grid)
+    rgb_from_grid, image_from_grid, add_obstacles,
+    MEAN_OBSTACLE_AREA)
 from marlenv.core.render import draw_frame, image_from_env
 from marlenv.core.snake import Direction, Snake, Cell, CellColors
 from marlenv.envs.constants import FEATURE_CHANNEL, RGB_CHANNEL
@@ -76,6 +77,14 @@ class SnakeEnv(gym.Env):
         self.render_style = kwargs.pop('render_style', 'classic')
         self.cell_size = kwargs.pop('cell_size', 16)
 
+        # procedural layout. Both default to off, so an env constructed the
+        # old way still gets a fixed, empty board.
+        self.grid_size_range = kwargs.pop('grid_size_range', None)
+        # obstacle_density is the fraction of interior cells walled off;
+        # num_obstacles overrides it with an exact piece count
+        self.obstacle_density = kwargs.pop('obstacle_density', 0.0)
+        self.num_obstacles = kwargs.pop('num_obstacles', None)
+
         self.num_snakes = num_snakes
         self.num_fruits = kwargs.pop('num_fruits',
                                      int(round(num_snakes * 0.8)))
@@ -124,10 +133,14 @@ class SnakeEnv(gym.Env):
     def reset(self, *, seed=None, options=None):
         # seeds self.np_random, which drives every random draw below
         super().reset(seed=seed)
-        # Create the grid base
+        if self.grid_size_range is not None:
+            self._resample_grid_shape()
+        # Create the grid base, then scatter any obstacles into it before
+        # snakes and fruit are placed, so both avoid them for free
         self.grid = make_grid(*self.grid_shape,
                               empty_value=Cell.EMPTY.value,
                               wall_value=Cell.WALL.value)
+        self._place_obstacles()
         # Generate and add snake to the grid
         self.snakes = self._generate_snakes()
         for snake in self.snakes:
@@ -152,6 +165,55 @@ class SnakeEnv(gym.Env):
         self.episode_length = 0
 
         return np.array(obs, dtype=np.uint8), {}
+
+    def _resample_grid_shape(self):
+        """Pick a new square board size for this episode.
+
+        Square because the learned observation canonicalises headings by
+        rotating the grid, which only preserves shape on a square board.
+        """
+        low, high = self.grid_size_range
+        side = int(self.np_random.integers(low, high + 1))
+        if self.grid_shape != (side, side):
+            self.grid_shape = (side, side)
+            self._rebuild_observation_space()
+
+    def _place_obstacles(self):
+        """Scatter interior walls, leaving room for every snake to spawn.
+
+        The count is retried downwards rather than the layout being
+        regenerated, so a board that is too crowded degrades to a sparser
+        one instead of failing.
+        """
+        count = self.num_obstacles
+        if count is None:
+            # obstacle_density is the target fraction of interior cells that
+            # become wall; pieces cover several cells each
+            interior = (self.grid_shape[0] - 2) * (self.grid_shape[1] - 2)
+            count = int(round(interior * self.obstacle_density
+                              / MEAN_OBSTACLE_AREA))
+        if count <= 0:
+            return
+
+        clean = self.grid.copy()
+        while count > 0:
+            self.grid[:] = clean
+            add_obstacles(self.grid, count, np_random=self.np_random,
+                          wall_value=Cell.WALL.value,
+                          empty_value=Cell.EMPTY.value)
+            if len(dfs_sweep_empty(self.grid, self.snake_length)) >= \
+                    4 * self.num_snakes:
+                return
+            count //= 2
+        self.grid[:] = clean
+
+    def _rebuild_observation_space(self):
+        shape = ([self.num_snakes, self.vision_range * 2 + 1,
+                  self.vision_range * 2 + 1, self.obs_ch]
+                 if self.vision_range
+                 else [self.num_snakes, *self.grid_shape, self.obs_ch])
+        self.observation_space = gym.spaces.Box(
+            self.low, self.high, shape=shape, dtype=np.uint8)
 
     def seed(self, seed=42):
         self.np_random, seed = seeding.np_random(seed)
@@ -479,7 +541,7 @@ class SnakeEnv(gym.Env):
     def _generate_snakes(self):
         # Depth-first-search through the grid for possible snake positions
         candidates = dfs_sweep_empty(self.grid, self.snake_length)
-        while True:
+        for _ in range(1000):
             # Randomly select init snake poses untill no overlap
             sample_idx = self.np_random.permutation(
                 len(candidates)
@@ -487,6 +549,11 @@ class SnakeEnv(gym.Env):
             samples = [candidates[si] for si in sample_idx]
             if self._clear_overlap(samples):
                 break
+        else:
+            raise RuntimeError(
+                f'could not place {self.num_snakes} snakes of length '
+                f'{self.snake_length} on this board; it is too crowded'
+            )
         snakes = [Snake(idx, coords) for idx, coords in enumerate(samples)]
 
         return snakes

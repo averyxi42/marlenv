@@ -153,6 +153,77 @@ def poll_empty_coord(grid, np_random=None):
     return x, y
 
 
+def empty_space_is_connected(grid, empty_value=0):
+    """True when every empty cell is reachable from every other.
+
+    Obstacles that cut the board in two would strand snakes in a pocket and
+    let fruit spawn where nothing can reach it, so generators check this.
+    """
+    mask = grid == empty_value
+    total = int(mask.sum())
+    if total == 0:
+        return False
+
+    start = tuple(np.argwhere(mask)[0])
+    seen = np.zeros_like(mask)
+    seen[start] = True
+    stack = [start]
+    reached = 1
+    while stack:
+        r, c = stack.pop()
+        for dr, dc in SHIFTS:
+            nr, nc = r + dr, c + dc
+            if (0 <= nr < mask.shape[0] and 0 <= nc < mask.shape[1]
+                    and mask[nr, nc] and not seen[nr, nc]):
+                seen[nr, nc] = True
+                reached += 1
+                stack.append((nr, nc))
+    return reached == total
+
+
+# obstacle footprints, biased towards small pieces so corridors stay open
+OBSTACLE_SHAPES = [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (2, 2)]
+# average cells per piece, so a caller can turn a target wall coverage into
+# a piece count
+MEAN_OBSTACLE_AREA = sum(r * c for r, c in OBSTACLE_SHAPES) / len(
+    OBSTACLE_SHAPES)
+
+
+def add_obstacles(grid, num_obstacles, np_random=None, wall_value=1,
+                  empty_value=0, shapes=None, max_attempts=None):
+    """Scatter interior walls, keeping the free space connected.
+
+    Each piece is placed provisionally and reverted if it would disconnect
+    the board, so the result is connected by construction rather than by
+    retrying the whole layout. Returns the number actually placed, which may
+    be fewer than asked for on a crowded board.
+    """
+    rng = _default_rng if np_random is None else np_random
+    shapes = shapes or OBSTACLE_SHAPES
+    height, width = grid.shape
+    max_attempts = max_attempts or max(20, num_obstacles * 12)
+
+    placed = 0
+    for _ in range(max_attempts):
+        if placed >= num_obstacles:
+            break
+        rows, cols = shapes[rng.integers(len(shapes))]
+        if height - 1 - rows < 1 or width - 1 - cols < 1:
+            continue
+        top = int(rng.integers(1, height - rows))
+        left = int(rng.integers(1, width - cols))
+        block = grid[top:top + rows, left:left + cols]
+        if not np.all(block == empty_value):
+            continue
+
+        grid[top:top + rows, left:left + cols] = wall_value
+        if empty_space_is_connected(grid, empty_value):
+            placed += 1
+        else:
+            grid[top:top + rows, left:left + cols] = empty_value
+    return placed
+
+
 def draw(grid, coords: List[tuple], value: int):
     h, w = grid.shape
     xs, ys = [], []
