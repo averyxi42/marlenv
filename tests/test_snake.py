@@ -54,9 +54,13 @@ def graph_snake_env():
     return env
 
 
-def rollout(env, n=100, render_mode=None):
+def rollout(env, n=100, render_mode=None, seed=0):
+    # seeded so the number of rendered frames is reproducible: an unseeded
+    # rollout kills a lone snake within a step or two often enough to break
+    # the gif tests, which need at least two frames
     num_snakes = env.unwrapped.num_snakes
-    obs, info = env.reset()
+    obs, info = env.reset(seed=seed)
+    env.action_space.seed(seed)
     dones = [False] * num_snakes
 
     for _ in range(n):

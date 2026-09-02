@@ -85,6 +85,7 @@ class NetworkEvaluator:
     """
 
     def __init__(self, net, device=None):
+        self.num_actions = net.num_actions
         self.device = torch.device(
             device or ('cuda' if torch.cuda.is_available() else 'cpu'))
         self.net = net.to(self.device)
@@ -100,7 +101,7 @@ class NetworkEvaluator:
         """
         planes, indices = observe(env)
         if not indices:
-            return [], np.zeros((0, self.net.num_actions), dtype=np.float32), \
+            return [], np.zeros((0, self.num_actions), dtype=np.float32), \
                 np.zeros((0,), dtype=np.float32)
 
         heads = head_positions(planes)

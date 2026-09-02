@@ -1,8 +1,10 @@
+from marlenv.policies.evaluators import RolloutEvaluator, UniformEvaluator
 from marlenv.policies.mcts import MCTSSolver
 from marlenv.policies.objectives import (CommunalObjective, OBJECTIVES,
                                          get_objective)
 
-__all__ = ['MCTSSolver', 'CommunalObjective', 'OBJECTIVES', 'get_objective']
+__all__ = ['MCTSSolver', 'CommunalObjective', 'OBJECTIVES', 'get_objective',
+           'UniformEvaluator', 'RolloutEvaluator']
 
 try:  # the learned solver is optional -- it needs torch
     from marlenv.policies.alphazero import AlphaZeroSolver

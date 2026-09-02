@@ -150,7 +150,7 @@ class AlphaZeroSolver:
             self._simulate(root)
 
         self._root = root
-        num_actions = self.evaluator.net.num_actions
+        num_actions = self.evaluator.num_actions
         target = np.zeros((base.num_snakes, num_actions), dtype=np.float32)
         if not root.expanded or root.total_visits == 0:
             self.last_stats = {'root_visits': 0, 'num_children': 0}
@@ -325,7 +325,9 @@ class AlphaZeroSolver:
         q = np.where(visits > 0,
                      node.value_sum / np.maximum(visits, 1),
                      node.value)
-        q = np.array([self._value_range.normalize(v) for v in q])
+        low, high = self._value_range.low, self._value_range.high
+        if high > low:
+            q = (q - low) / (high - low)
         u = self.c_puct * node.priors * math.sqrt(total) / (1 + visits)
         return int(np.argmax(q + u))
 
