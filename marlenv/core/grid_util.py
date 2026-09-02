@@ -169,7 +169,9 @@ def draw(grid, coords: List[tuple], value: int):
     return True
 
 
-def rgb_from_grid(grid, enum, color_dict):
+def rgb_from_grid(grid, enum, color_dict,noise_sigma = 2, np_random=None):
+    rng = _default_rng if np_random is None else np_random
+
     rgb_array = np.zeros((*grid.shape, 3), dtype=np.uint8)
     for r in range(grid.shape[0]):
         for c in range(grid.shape[1]):
@@ -179,6 +181,9 @@ def rgb_from_grid(grid, enum, color_dict):
             cell_color = np.array(color_list[cell_id % len(color_list)])
             cycle = cell_id // len(color_list)
             rgb_array[r, c] = (cell_color * 0.7**cycle).astype(np.uint8)
+            if noise_sigma is not None:
+                noise = rng.normal(0, noise_sigma, size=3)
+                rgb_array[r, c] = np.clip(rgb_array[r, c] + noise, 0, 255).astype(np.uint8)
 
     return rgb_array
 

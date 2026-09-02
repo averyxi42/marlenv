@@ -71,6 +71,11 @@ def parse_args():
                    help='cap the branching factor '
                         '(3 ** num_snakes by default)')
     p.add_argument('--seed', type=int, default=0)
+    p.add_argument('--style', default='pixel', choices=['classic', 'pixel'],
+                   help='pixel is the retro renderer, which also shows each '
+                        'segment direction (default)')
+    p.add_argument('--cell-size', type=int, default=16,
+                   help='pixels per grid cell, for --style pixel')
     p.add_argument('--out', default=None,
                    help='output path (default: ./tmp/<timestamp>.gif)')
     p.add_argument('--quiet', action='store_true')
@@ -137,6 +142,8 @@ def main():
         num_snakes=args.num_snakes,
         num_fruits=args.num_fruits,
         reward_dict=REWARD_DICT,
+        render_style=args.style,
+        cell_size=args.cell_size,
         disable_env_checker=True,
     )
     solver = build_solver(args, num_actions=len(env.unwrapped.action_dict))
@@ -167,7 +174,8 @@ def main():
     else:
         print(f'reached the {args.steps} step limit')
 
-    print(f'policy={args.policy}  communal={args.communal}  '
+    print(f'policy={args.policy}  style={args.style}  '
+          f'communal={args.communal}  '
           f'returns={np.round(returns, 2).tolist()}  '
           f'total={returns.sum():.2f}  fruits={fruits.astype(int).tolist()}')
 

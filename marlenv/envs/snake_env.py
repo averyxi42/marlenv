@@ -13,6 +13,7 @@ from gymnasium.utils import seeding
 from marlenv.core.grid_util import (
     random_empty_coords, draw, make_grid, dfs_sweep_empty,
     rgb_from_grid, image_from_grid)
+from marlenv.core.render import draw_frame, image_from_env
 from marlenv.core.snake import Direction, Snake, Cell, CellColors
 from marlenv.envs.constants import FEATURE_CHANNEL, RGB_CHANNEL
 
@@ -70,6 +71,10 @@ class SnakeEnv(gym.Env):
             self.reward_dict = reward_dict
         self.max_episode_steps = kwargs.pop('max_episode_steps',
                                             SnakeEnv.max_episode_steps)
+        # 'classic' keeps the original flat colouring; 'pixel' uses the
+        # retro renderer, which also shows each segment's direction
+        self.render_style = kwargs.pop('render_style', 'classic')
+        self.cell_size = kwargs.pop('cell_size', 16)
 
         self.num_snakes = num_snakes
         self.num_fruits = kwargs.pop('num_fruits',
@@ -152,7 +157,8 @@ class SnakeEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def render(self, mode='ascii'):
+    def render(self, mode='ascii', style=None):
+        style = style or self.render_style
         if mode == 'ascii':
             # Just for debugging
             SYM2CHR = {
@@ -174,9 +180,15 @@ class SnakeEnv(gym.Env):
             # Save game play as gif
             # Create a game scene from the grid
             # Append to buffer
-            game_frame = image_from_grid(self.grid, Cell, CellColors)
+            if style == 'pixel':
+                game_frame = image_from_env(self.grid, self.snakes,
+                                            self.cell_size)
+            else:
+                game_frame = image_from_grid(self.grid, Cell, CellColors)
             self.frame_buffer.append(game_frame)
         elif mode == 'rgb_array':
+            if style == 'pixel':
+                return draw_frame(self.grid, self.snakes, self.cell_size)
             rgb_array = rgb_from_grid(self.grid, Cell, CellColors)
             return rgb_array
         elif mode == 'human':
