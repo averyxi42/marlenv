@@ -12,11 +12,11 @@ class CoopSnakeEnv(SnakeEnv):
         super().__init__(*args, **kwargs)
         
     def step(self, actions):
-        obs, rews, dones, info = super().step(actions)
+        obs, rews, dones, truncated, info = super().step(actions)
         if self._done_fn(dones):
             dones = [True] * self.num_snakes
 
-        return obs, rews, dones, info
+        return obs, rews, dones, truncated, info
 
     def _done_fn(self, dones):
         return any(dones)

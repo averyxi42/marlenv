@@ -3,7 +3,7 @@ import os
 import shutil
 import sys
 
-import gym
+import gymnasium as gym
 import marlenv
 import pytest
 from PIL import Image
@@ -55,8 +55,8 @@ def graph_snake_env():
 
 
 def rollout(env, n=100, render_mode=None):
-    num_snakes = env.num_snakes
-    obs = env.reset()
+    num_snakes = env.unwrapped.num_snakes
+    obs, info = env.reset()
     dones = [False] * num_snakes
 
     for _ in range(n):
@@ -64,7 +64,7 @@ def rollout(env, n=100, render_mode=None):
             if render_mode:
                 env.unwrapped.render(render_mode)
             ac = [env.action_space.sample() for _ in range(num_snakes)]
-            obs, rews, dones, _ = env.step(ac)
+            obs, rews, dones, truncs, _ = env.step(ac)
 
 
 def test_snake_env_rollout(snake_env):
@@ -92,7 +92,7 @@ def processed_snake_env(snake_env):
 
 def test_save_gif_default(processed_snake_env):
     env = processed_snake_env
-    image_dir = env.save_gif()
+    image_dir = env.unwrapped.save_gif()
     assert os.path.exists(image_dir)
 
     gif = Image.open(image_dir)
@@ -106,6 +106,6 @@ def test_save_gif_fileobj(processed_snake_env):
     env = processed_snake_env
 
     with io.BytesIO() as fileobj:
-        output = env.save_gif(fileobj)
+        output = env.unwrapped.save_gif(fileobj)
 
     assert sys.getsizeof(output) > 0

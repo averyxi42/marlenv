@@ -7,8 +7,8 @@ import datetime
 import warnings
 
 import numpy as np
-import gym
-from gym.utils import seeding
+import gymnasium as gym
+from gymnasium.utils import seeding
 
 from marlenv.core.grid_util import (
     random_empty_coords, draw, make_grid, dfs_sweep_empty,
@@ -116,7 +116,8 @@ class SnakeEnv(gym.Env):
                 dtype=np.uint8
             )
 
-    def reset(self):
+    def reset(self, *, seed=None, options=None):
+        super().reset(seed=seed)
         # Create the grid base
         self.grid = make_grid(*self.grid_shape,
                               empty_value=Cell.EMPTY.value,
@@ -144,7 +145,7 @@ class SnakeEnv(gym.Env):
         self._reset_epi_stats()
         self.episode_length = 0
 
-        return np.array(obs, dtype=np.uint8)
+        return np.array(obs, dtype=np.uint8), {}
 
     def seed(self, seed=42):
         self.np_random, seed = seeding.np_random(seed)
@@ -297,7 +298,9 @@ class SnakeEnv(gym.Env):
 
             self._reset_epi_stats()
 
-        return np.array(obs, dtype=np.uint8), rews, dones, info
+        truncated = [False] * self.num_snakes
+
+        return np.array(obs, dtype=np.uint8), rews, dones, truncated, info
 
     def _done_fn(self, dones):
         return all(dones)
