@@ -95,28 +95,43 @@ def _draw_fruit(image, r, c, cell):
 
 
 def _draw_segment(image, r, c, cell, color, link_color, links, pad,
-                  link_pad):
-    """A bead, joined to its neighbours by a narrower, darker link.
+                  end_pad, link_pad):
+    """A segment block, stretched along the direction it travels.
 
-    Two things separate one segment from the next: the link is thinner than
-    the bead, so the background shows through at every joint, and it is
-    darker, so the seam stays visible even where two beads nearly touch.
-    Together they make the body a countable chain rather than a solid bar,
-    without mottling the beads themselves.
+    The block is inset by ``pad`` on its free sides but only by ``end_pad``
+    on any side it links towards, so a straight run becomes a rectangle
+    reaching towards both neighbours instead of an isolated square. What is
+    left between two blocks is a narrow, darker seam rather than a gap, which
+    keeps the body continuous while still marking every segment boundary.
     """
     top, left = r * cell, c * cell
-    lo, hi = pad, cell - pad
-    llo, lhi = link_pad, cell - link_pad
+    up = down = left_pad = right_pad = pad
     for dr, dc in links:
         if dr < 0:
-            image[top:top + lo, left + llo:left + lhi] = link_color
+            up = end_pad
         elif dr > 0:
-            image[top + hi:top + cell, left + llo:left + lhi] = link_color
+            down = end_pad
         elif dc < 0:
-            image[top + llo:top + lhi, left:left + lo] = link_color
+            left_pad = end_pad
         elif dc > 0:
-            image[top + llo:top + lhi, left + hi:left + cell] = link_color
-    image[top + lo:top + hi, left + lo:left + hi] = color
+            right_pad = end_pad
+
+    # seams first, then the block over them
+    lo, hi = link_pad, cell - link_pad
+    for dr, dc in links:
+        if dr < 0:
+            image[top:top + up, left + lo:left + hi] = link_color
+        elif dr > 0:
+            image[top + cell - down:top + cell, left + lo:left + hi] = \
+                link_color
+        elif dc < 0:
+            image[top + lo:top + hi, left:left + left_pad] = link_color
+        elif dc > 0:
+            image[top + lo:top + hi,
+                  left + cell - right_pad:left + cell] = link_color
+
+    image[top + up:top + cell - down,
+          left + left_pad:left + cell - right_pad] = color
 
 
 def _draw_eyes(image, r, c, cell, direction):
@@ -154,12 +169,14 @@ def draw_frame(grid, snakes, cell_size=16):
 
     # beads sit well inside their cell so the background frames every
     # segment; the head is the widest, the tail the narrowest
+    # blocks sit well inside their cell across the direction of travel, so
+    # the background frames the body, but reach close to the cell edge along
+    # it, so consecutive segments read as one continuous chain
     head_pad = max(1, round(cell_size * 0.18))
     body_pad = max(1, round(cell_size * 0.22))
-    tail_pad = max(body_pad + 1, round(cell_size * 0.34))
-    # the link is roughly half the bead's width, so every joint visibly
-    # pinches and the segments stay countable
-    link_pad = max(body_pad + 1, round(cell_size * 0.38))
+    tail_pad = max(body_pad + 1, round(cell_size * 0.32))
+    end_pad = max(1, round(cell_size * 0.08))
+    link_pad = max(body_pad + 1, round(cell_size * 0.30))
     outline = max(1, cell_size // 14)
 
     for snake in snakes:
@@ -191,21 +208,24 @@ def draw_frame(grid, snakes, cell_size=16):
         for position, (r, c) in enumerate(coords):
             _draw_segment(image, r, c, cell_size, palette['edge'],
                           palette['edge'], links_for(position, r, c),
-                          max(0, pad_for(position) - outline),
+                          max(0, pad_for(position) - outline), end_pad,
                           max(0, link_pad - outline))
 
         for position, (r, c) in enumerate(coords):
             links = links_for(position, r, c)
             if position == 0:
                 _draw_segment(image, r, c, cell_size, palette['head'],
-                              palette['joint'], links, head_pad, link_pad)
+                              palette['joint'], links, head_pad, end_pad,
+                              link_pad)
                 _draw_eyes(image, r, c, cell_size, snake.direction.value)
             elif position == last:
                 _draw_segment(image, r, c, cell_size, palette['tail'],
-                              palette['joint'], links, tail_pad, link_pad)
+                              palette['joint'], links, tail_pad, end_pad,
+                              link_pad)
             else:
                 _draw_segment(image, r, c, cell_size, palette['body'],
-                              palette['joint'], links, body_pad, link_pad)
+                              palette['joint'], links, body_pad, end_pad,
+                              link_pad)
     return image
 
 
