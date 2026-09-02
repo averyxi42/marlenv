@@ -135,3 +135,34 @@ def test_solver_drives_every_snake_to_a_longer_episode(env):
     searched = run(lambda _: solver.solve(env))
 
     assert searched > noop
+
+
+def test_inert_observations_do_not_change_the_search(env):
+    """The stubbed-out encoding must be invisible to the chosen actions."""
+    sequences = []
+    for inert in (False, True):
+        env.reset(seed=1)
+        solver = MCTSSolver(sum, num_simulations=40, max_depth=5,
+                            rollout_depth=6, seed=0,
+                            inert_observations=inert)
+        actions = []
+        for _ in range(8):
+            action = solver.solve(env)
+            actions.append(action)
+            _, _, term, trunc, _ = env.step(action)
+            if all(term) or all(trunc):
+                break
+        sequences.append(actions)
+
+    assert sequences[0] == sequences[1]
+
+
+def test_inert_clone_skips_observation_work(env, solver):
+    env.reset(seed=0)
+    solver.solve(env)
+    sim = solver._root.env
+
+    assert sim.observation_space is None
+    assert sim._get_obs() == []
+    # the real env is untouched
+    assert env.unwrapped.observation_space is not None

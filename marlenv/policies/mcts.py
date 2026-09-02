@@ -11,6 +11,16 @@ import math
 import numpy as np
 
 
+def _inert_obs():
+    """Stand-in for SnakeEnv._get_obs / _init_obs on simulation clones.
+
+    ``step`` builds the full per-snake feature encoding on every call, which
+    costs more than the rest of the transition put together. The search only
+    ever reads rewards and done flags, so simulation clones skip it.
+    """
+    return []
+
+
 class _MinMax:
     """Running value range, used to normalise Q values before UCT.
 
@@ -96,6 +106,12 @@ class MCTSSolver:
         full product, which is ``n_actions ** n_alive_snakes``.
     reuse_tree : bool
         Whether to reuse the subtree across :meth:`solve` calls.
+    inert_observations : bool
+        Strip observation encoding and the gym spaces from simulation clones.
+        The search reads only rewards and done flags, so this is a pure
+        saving -- it leaves the chosen action unchanged and makes the search
+        several times faster. Turn it off if a subclass needs real
+        observations during search.
     seed : int or None
         Seed for the solver's own rollout/sampling RNG.
     """
@@ -110,6 +126,7 @@ class MCTSSolver:
             discount=0.95,
             max_joint_actions=None,
             reuse_tree=True,
+            inert_observations=True,
             seed=None,
     ):
         if not callable(communal_reward_fn):
@@ -122,6 +139,7 @@ class MCTSSolver:
         self.discount = discount
         self.max_joint_actions = max_joint_actions
         self.reuse_tree = reuse_tree
+        self.inert_observations = inert_observations
         self.np_random = np.random.default_rng(seed)
 
         self._root = None
@@ -173,7 +191,10 @@ class MCTSSolver:
         root = self._reuse_root(key)
         if root is None:
             self._transpositions = {}
-            root = self._make_node(key, self._clone(env), terminal=False)
+            sim = self._clone(env)
+            if self.inert_observations:
+                self._make_inert(sim)
+            root = self._make_node(key, sim, terminal=False)
 
         self._value_range = _MinMax()
         for _ in range(self.num_simulations):
@@ -250,6 +271,27 @@ class MCTSSolver:
             if frames:
                 base.frame_buffer = frames
         return clone
+
+    def _make_inert(self, sim):
+        """Strip a simulation clone down to what the search actually reads.
+
+        Only the root clone needs this: it is applied once and every deeper
+        clone inherits it through the deepcopy. Three things go:
+
+        * observation encoding, stubbed out via :func:`_inert_obs`;
+        * the cached observation deque it fills;
+        * the observation/action spaces, which the search never consults and
+          which are otherwise the single most expensive part of cloning
+          (their bounds are dense arrays the size of an observation).
+        """
+        sim._get_obs = _inert_obs
+        sim._init_obs = _inert_obs
+        obs = getattr(sim, 'obs', None)
+        if obs is not None:
+            obs.clear()
+        sim.observation_space = None
+        sim.action_space = None
+        return sim
 
     def _joint_actions(self, env):
         """Joint actions worth trying from ``env``'s state.
