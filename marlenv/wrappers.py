@@ -48,8 +48,9 @@ class SingleAgent(gym.Wrapper):
 class SingleMultiAgent(gym.Wrapper):
     def __init__(self, env):
         super().__init__(env)
-        self.action_space = gym.spaces.Discrete(
-            len(self.env.unwrapped.action_dict))
+        self.action_space = gym.spaces.MultiDiscrete(
+            [len(self.env.unwrapped.action_dict)]
+            * self.env.unwrapped.num_snakes)
         if self.env.unwrapped.vision_range:
             h = w = self.env.unwrapped.vision_range * 2 + 1
             self.observation_space = gym.spaces.Box(
@@ -255,20 +256,29 @@ def make_snake(num_envs=1, num_snakes=4, env_id="Snake-v1", **kwargs):
     observation_shape = dummyenv.observation_space.shape
     if num_snakes > 1:
         observation_shape = observation_shape[1:]
-    action_shape = (dummyenv.action_space.n,)
     high = dummyenv.observation_space.high
     low = dummyenv.observation_space.low
 
-    if 'Discrete' in str(type(dummyenv.action_space)):
-        action_info = {'action_n': dummyenv.action_space.n}
+    if isinstance(dummyenv.action_space, gym.spaces.MultiDiscrete):
+        # one Discrete choice per snake; they all share the same size
+        action_n = int(dummyenv.action_space.nvec[0])
+        action_info = {'action_n': action_n}
         discrete = True
-
-    if 'Box' in str(type(dummyenv.action_space)):
+    elif isinstance(dummyenv.action_space, gym.spaces.Discrete):
+        action_n = int(dummyenv.action_space.n)
+        action_info = {'action_n': action_n}
+        discrete = True
+    elif isinstance(dummyenv.action_space, gym.spaces.Box):
         action_info = {
             'action_high': dummyenv.action_space.high,
             'action_low': dummyenv.action_space.low
         }
         discrete = False
+    else:
+        raise NotImplementedError(
+            f'Unsupported action space {type(dummyenv.action_space)}'
+        )
+    action_shape = (action_n,) if discrete else dummyenv.action_space.shape
 
     del dummyenv
 

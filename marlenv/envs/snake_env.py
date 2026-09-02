@@ -92,8 +92,8 @@ class SnakeEnv(gym.Env):
         elif self.observer == 'snake':
             self.action_dict = SnakeEnv.action_angle_dict
 
-        self.action_space = gym.spaces.Discrete(
-            len(self.action_dict) * self.num_snakes
+        self.action_space = gym.spaces.MultiDiscrete(
+            [len(self.action_dict)] * self.num_snakes
         )
 
         self.frame_stack = frame_stack
@@ -117,6 +117,7 @@ class SnakeEnv(gym.Env):
             )
 
     def reset(self, *, seed=None, options=None):
+        # seeds self.np_random, which drives every random draw below
         super().reset(seed=seed)
         # Create the grid base
         self.grid = make_grid(*self.grid_shape,
@@ -277,10 +278,13 @@ class SnakeEnv(gym.Env):
 
         info = {}
         self.episode_length += 1
+        truncated = [False] * self.num_snakes
         if self.episode_length >= self.max_episode_steps:
-            dones = [True] * self.num_snakes
+            # snakes still alive at the time limit are truncated, not
+            # terminated; the ones already dead keep their done flag
+            truncated = [not done for done in dones]
 
-        if self._done_fn(dones):
+        if self._done_fn(dones) or any(truncated):
             sorted_scores = np.unique(np.sort(self.epi_scores)[::-1])
             ranks = np.array([0 for _ in range(self.num_snakes)])
             base_rank = 1
@@ -297,8 +301,6 @@ class SnakeEnv(gym.Env):
                  'episode_kills': self.epi_kills})
 
             self._reset_epi_stats()
-
-        truncated = [False] * self.num_snakes
 
         return np.array(obs, dtype=np.uint8), rews, dones, truncated, info
 
@@ -467,7 +469,7 @@ class SnakeEnv(gym.Env):
         candidates = dfs_sweep_empty(self.grid, self.snake_length)
         while True:
             # Randomly select init snake poses untill no overlap
-            sample_idx = np.random.permutation(
+            sample_idx = self.np_random.permutation(
                 len(candidates)
             )[:self.num_snakes]
             samples = [candidates[si] for si in sample_idx]
@@ -480,7 +482,8 @@ class SnakeEnv(gym.Env):
     def _generate_fruits(self, num_fruits=1):
         xs = ys = None
         if num_fruits:
-            xs, ys = random_empty_coords(self.grid, num_coords=num_fruits)
+            xs, ys = random_empty_coords(self.grid, num_coords=num_fruits,
+                                         np_random=self.np_random)
 
         return xs, ys
 

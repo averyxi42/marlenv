@@ -1,10 +1,10 @@
 from setuptools import setup, find_packages
 import io
 
-with open("README.md") as f:
-    with io.open("README.md", encoding="utf-8") as f:
-        long_description = f.read()
-        
+with io.open("README.md", encoding="utf-8") as f:
+    long_description = f.read()
+
+
 setup(
     name='marlenv',
     version='1.0.1',
@@ -16,6 +16,8 @@ setup(
     packages=find_packages(),
     install_requires=[
         'gymnasium>=1.0',
+        'numpy>=1.21',
+        'Pillow>=9.0.1',
     ],
     python_requires='>=3.8',
 

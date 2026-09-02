@@ -63,7 +63,7 @@ def rollout(env, n=100, render_mode=None):
         if not all(dones):
             if render_mode:
                 env.unwrapped.render(render_mode)
-            ac = [env.action_space.sample() for _ in range(num_snakes)]
+            ac = env.action_space.sample()
             obs, rews, dones, truncs, _ = env.step(ac)
 
 
@@ -99,7 +99,7 @@ def test_save_gif_default(processed_snake_env):
     gif.seek(1)
 
     d = os.path.dirname(image_dir)
-    shutil.rmtree(d)
+    # shutil.rmtree(d)
 
 
 def test_save_gif_fileobj(processed_snake_env):

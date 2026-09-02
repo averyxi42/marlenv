@@ -4,6 +4,11 @@ import numpy as np
 import copy
 from PIL import Image
 
+# Fallback generator for callers that do not supply one. Passing an explicit
+# ``np_random`` (e.g. an env's ``self.np_random``) is what makes sampling
+# reproducible.
+_default_rng = np.random.default_rng()
+
 DOWN = (0, 1)
 RIGHT = (1, 0,)
 UP = (0, -1)
@@ -115,31 +120,34 @@ def _inbound(node, grid):
     return r >= 0 and c >= 0 and r < grid.shape[0] and c < grid.shape[1]
 
 
-def random_empty_coord(grid: np.ndarray):
+def random_empty_coord(grid: np.ndarray, np_random=None):
     # has to sweep entire grid O(H*W)
+    rng = _default_rng if np_random is None else np_random
     xs, ys = np.where(grid == 0)
-    idx = np.random.randint(0, len(xs) - 1)
+    idx = rng.integers(0, len(xs) - 1)
 
     return xs[idx], ys[idx]
 
 
-def random_empty_coords(grid, num_coords: int):
+def random_empty_coords(grid, num_coords: int, np_random=None):
+    rng = _default_rng if np_random is None else np_random
     xs, ys = np.where(grid == 0)
     if len(xs) == 0:
         return None, None
-    idxes = np.random.randint(0, len(xs), size=num_coords)
+    idxes = rng.integers(0, len(xs), size=num_coords)
     # coords = np.stack(xs[idxes], ys[idxes]).T
 
     return xs[idxes], ys[idxes]
 
 
-def poll_empty_coord(grid):
+def poll_empty_coord(grid, np_random=None):
+    rng = _default_rng if np_random is None else np_random
     h, w = grid.shape
     # max index - wall * 2
     x, y = 0, 0
     while grid[x, y] != 0:
-        x = np.random.randint(0, h - 1)
-        y = np.random.randint(0, w - 1)
+        x = rng.integers(0, h - 1)
+        y = rng.integers(0, w - 1)
 
     # +1 to omit wall
     return x, y
