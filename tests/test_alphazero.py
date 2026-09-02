@@ -248,3 +248,33 @@ def test_root_noise_diversifies_reused_trees(env, evaluator):
 
     assert len(greedy) == 1, 'noise-free search should be deterministic'
     assert len(noisy) > 1, 'root noise did not reach the reused root'
+
+
+def test_buffer_batches_are_homogeneous_in_board_size():
+    """Variable board sizes must not end up stacked into one batch."""
+    buffer = ReplayBuffer(capacity=100, seed=0)
+    for side in (11, 15):
+        for _ in range(20):
+            views = np.zeros((2, NUM_CHANNELS, side, side), dtype=np.uint8)
+            views[:, CHANNELS.index('my_head'), 1, 1] = 1
+            buffer.add(views, np.ones(2, dtype=np.float32),
+                       np.full((2, 3), 1 / 3, dtype=np.float32), 1.0)
+
+    assert len(buffer) == 40
+    for _ in range(10):
+        batch = buffer.sample(8, 'cpu')
+        side = batch['views'].shape[-1]
+        assert batch['views'].shape[-2] == side
+        assert side in (11, 15)
+
+
+def test_buffer_evicts_without_starving_a_board_size():
+    buffer = ReplayBuffer(capacity=20, seed=0)
+    for i in range(60):
+        side = 11 if i % 2 else 15
+        views = np.zeros((1, NUM_CHANNELS, side, side), dtype=np.uint8)
+        buffer.add(views, np.ones(1, dtype=np.float32),
+                   np.full((1, 3), 1 / 3, dtype=np.float32), 0.0)
+
+    assert len(buffer) == 20
+    assert all(len(b) > 0 for b in buffer.buckets.values())

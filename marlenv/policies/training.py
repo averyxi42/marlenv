@@ -17,26 +17,49 @@ from marlenv.policies.objectives import get_objective
 
 
 class ReplayBuffer:
-    """Fixed-capacity store of self-play positions.
+    """Fixed-capacity store of self-play positions, bucketed by board size.
+
+    A variable board size means views differ in height and width, which
+    cannot be stacked into one batch. Positions are therefore grouped by view
+    shape and each batch is drawn from a single bucket, so batches stay
+    homogeneous without padding the boards -- padding would distort both the
+    global pooling and the wall channel, since "outside the board" and "wall"
+    are not the same thing to the network.
 
     Views are kept as uint8 because every feature plane is an indicator; they
     become float on the way into a batch.
     """
 
     def __init__(self, capacity=30000, seed=None):
-        self.data = deque(maxlen=capacity)
+        self.capacity = capacity
+        self.buckets = {}
+        self.total = 0
         self.random = random.Random(seed)
 
     def __len__(self):
-        return len(self.data)
+        return self.total
 
     def add(self, views, alive, policy_target, value_target):
-        self.data.append((views.astype(np.uint8), alive.astype(np.float32),
-                          policy_target.astype(np.float32),
-                          np.float32(value_target)))
+        entry = (views.astype(np.uint8), alive.astype(np.float32),
+                 policy_target.astype(np.float32), np.float32(value_target))
+        self.buckets.setdefault(views.shape, deque()).append(entry)
+        self.total += 1
+        while self.total > self.capacity:
+            # evict from the largest bucket, so no board size is starved
+            largest = max(self.buckets.values(), key=len)
+            largest.popleft()
+            self.total -= 1
 
     def sample(self, batch_size, device):
-        batch = self.random.sample(self.data, min(batch_size, len(self.data)))
+        # prefer buckets that can fill a whole batch, weighted by size
+        keys = [k for k, v in self.buckets.items() if v]
+        full = [k for k in keys if len(self.buckets[k]) >= batch_size]
+        keys = full or keys
+        weights = [len(self.buckets[k]) for k in keys]
+        chosen = self.random.choices(keys, weights=weights)[0]
+        bucket = list(self.buckets[chosen])
+
+        batch = self.random.sample(bucket, min(batch_size, len(bucket)))
         views = np.stack([b[0] for b in batch]).astype(np.float32)
         alive = np.stack([b[1] for b in batch])
         policy = np.stack([b[2] for b in batch])
