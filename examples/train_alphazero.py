@@ -53,9 +53,32 @@ def parse_args():
     p.add_argument('--eval-episodes', type=int, default=6)
     p.add_argument('--device', default=None)
     p.add_argument('--seed', type=int, default=0)
-    p.add_argument('--out', default=None, help='checkpoint path')
+    p.add_argument('--out', default=None,
+                   help='checkpoint prefix; writes <out>_latest.pt, '
+                        '<out>_best.pt and <out>_iter<N>.pt')
+    p.add_argument('--checkpoint-every', type=int, default=5,
+                   help='iterations between rolling checkpoints')
+    p.add_argument('--keep-every', type=int, default=0,
+                   help='also keep a permanent snapshot this often '
+                        '(0 disables)')
+    p.add_argument('--resume', default=None,
+                   help='checkpoint to resume weights and optimiser from')
     p.add_argument('--log', default=None, help='JSON lines metrics path')
     return p.parse_args()
+
+
+def save_checkpoint(path, net, optimizer, args, iteration, best):
+    """Everything needed to resume or to reload for evaluation."""
+    torch.save({
+        'model': net.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'iteration': iteration,
+        'best_eval': best,
+        'objective': args.objective,
+        'channels': args.channels,
+        'blocks': args.blocks,
+        'num_snakes': args.num_snakes,
+    }, path)
 
 
 def make_env(args, num_snakes):
@@ -110,9 +133,21 @@ def main():
     print(f'device={device}  params={params}  objective={args.objective}  '
           f'snakes={args.num_snakes}  sims={args.num_simulations}')
 
-    log = open(args.log, 'w') if args.log else None
+    start_iteration = 1
+    best_eval = -float('inf')
+    if args.resume:
+        state = torch.load(args.resume, map_location=device,
+                           weights_only=False)
+        net.load_state_dict(state['model'])
+        if 'optimizer' in state:
+            optimizer.load_state_dict(state['optimizer'])
+        start_iteration = state.get('iteration', 0) + 1
+        best_eval = state.get('best_eval', -float('inf'))
+        print(f'resumed from {args.resume} at iteration {start_iteration}')
+
+    log = open(args.log, 'a' if args.resume else 'w') if args.log else None
     start = time.time()
-    for iteration in range(1, args.iterations + 1):
+    for iteration in range(start_iteration, args.iterations + 1):
         play_returns = []
         for ep in range(args.episodes_per_iter):
             env.reset(seed=int(rng.integers(1 << 30)))
@@ -140,12 +175,29 @@ def main():
             for key in ('loss', 'value_loss', 'policy_loss'):
                 record[key] = float(np.mean([x[key] for x in losses]))
 
+        scored = None
         if iteration % args.eval_every == 0 or iteration == args.iterations:
             for count in eval_counts:
                 ret, length = evaluate(args, evaluator, count,
                                        seed_offset=iteration)
                 record[f'eval_return_n{count}'] = round(ret, 3)
                 record[f'eval_steps_n{count}'] = round(length, 1)
+            # the training configuration is what selects the best model
+            scored = record[f'eval_return_n{args.num_snakes}']
+
+        if args.out:
+            if scored is not None and scored > best_eval:
+                best_eval = scored
+                save_checkpoint(f'{args.out}_best.pt', net, optimizer, args,
+                                iteration, best_eval)
+                record['saved_best'] = round(best_eval, 3)
+            if (iteration % args.checkpoint_every == 0
+                    or iteration == args.iterations):
+                save_checkpoint(f'{args.out}_latest.pt', net, optimizer,
+                                args, iteration, best_eval)
+            if args.keep_every and iteration % args.keep_every == 0:
+                save_checkpoint(f'{args.out}_iter{iteration}.pt', net,
+                                optimizer, args, iteration, best_eval)
 
         print('  '.join(f'{k}={v}' for k, v in record.items()), flush=True)
         if log:
@@ -155,11 +207,8 @@ def main():
     if log:
         log.close()
     if args.out:
-        torch.save({'model': net.state_dict(),
-                    'objective': args.objective,
-                    'channels': args.channels,
-                    'blocks': args.blocks}, args.out)
-        print(f'saved checkpoint to {args.out}')
+        print(f'checkpoints under {args.out}_*.pt  '
+              f'(best eval_return_n{args.num_snakes}={best_eval:.3f})')
 
 
 if __name__ == '__main__':

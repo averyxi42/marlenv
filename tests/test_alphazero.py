@@ -228,3 +228,23 @@ def test_self_play_produces_aligned_positions(env, solver):
         assert alive.shape == (3,)
         assert policy.shape == (3, 3)
         assert np.isfinite(value)
+
+
+def test_root_noise_diversifies_reused_trees(env, evaluator):
+    """A reused root must still get fresh noise, or self-play is degenerate."""
+    def trajectory(seed, exploration):
+        solver = AlphaZeroSolver(evaluator, num_simulations=16, seed=seed,
+                                 exploration_fraction=exploration)
+        env.reset(seed=0)
+        actions = []
+        for _ in range(5):
+            action, _ = solver.search(env, add_noise=exploration > 0)
+            actions.append(tuple(action))
+            env.step(action)
+        return tuple(actions)
+
+    greedy = {trajectory(s, 0.0) for s in range(3)}
+    noisy = {trajectory(s, 0.25) for s in range(3)}
+
+    assert len(greedy) == 1, 'noise-free search should be deterministic'
+    assert len(noisy) > 1, 'root noise did not reach the reused root'

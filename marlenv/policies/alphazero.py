@@ -140,7 +140,12 @@ class AlphaZeroSolver:
             root = _AZNode(key, self._prepare(env), terminal=False)
 
         self._value_range = _MinMax()
-        self._expand(root, add_noise=add_noise)
+        self._expand(root)
+        if add_noise:
+            # applied here rather than inside _expand so that a reused root,
+            # which was expanded as somebody's child without noise, still
+            # gets fresh exploration noise
+            self._add_root_noise(root)
         for _ in range(self.num_simulations):
             self._simulate(root)
 
@@ -216,7 +221,16 @@ class AlphaZeroSolver:
             full[agent] = int(joint[slot])
         return full
 
-    def _expand(self, node, add_noise=False):
+    def _add_root_noise(self, node):
+        """Mix Dirichlet noise into the root's joint priors."""
+        if not node.expanded or self.exploration_fraction <= 0:
+            return
+        noise = self.np_random.dirichlet(
+            [self.dirichlet_alpha] * len(node.priors))
+        node.priors = ((1 - self.exploration_fraction) * node.priors
+                       + self.exploration_fraction * noise)
+
+    def _expand(self, node):
         """Evaluate ``node`` with the network and lay out its children."""
         if node.expanded or node.terminal:
             return node.value
@@ -233,12 +247,6 @@ class AlphaZeroSolver:
         node.agents = list(agents)
 
         priors = np.asarray(priors, dtype=np.float64)
-        if add_noise and self.exploration_fraction > 0:
-            noise = self.np_random.dirichlet(
-                [self.dirichlet_alpha] * priors.shape[1], size=len(agents))
-            priors = ((1 - self.exploration_fraction) * priors
-                      + self.exploration_fraction * noise)
-
         joints, joint_priors = self._joint_priors(priors)
         node.joint_actions = joints
         node.priors = joint_priors
