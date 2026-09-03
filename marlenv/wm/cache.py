@@ -14,9 +14,9 @@ import torch
 class KVCache:
     """Per-layer keys and values for tokens already committed."""
 
-    def __init__(self, layers, tokens_per_frame):
+    def __init__(self, layers, tokens_per_step):
         self.layers = layers
-        self.tokens_per_frame = tokens_per_frame
+        self.tokens_per_step = tokens_per_step
         self.keys = [None] * layers
         self.values = [None] * layers
         self.recording = False
@@ -59,7 +59,7 @@ class KVCache:
         if max_frames is None or self.frames <= max_frames:
             return 0
         drop_frames = self.frames - max_frames
-        drop_tokens = drop_frames * (self.tokens_per_frame + 1)
+        drop_tokens = drop_frames * self.tokens_per_step
         for layer in range(self.layers):
             if self.keys[layer] is not None:
                 self.keys[layer] = self.keys[layer][:, :, drop_tokens:]

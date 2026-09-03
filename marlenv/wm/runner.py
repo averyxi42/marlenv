@@ -31,7 +31,8 @@ class CachedRunner:
         self.model = model
         self.device = device or next(model.parameters()).device
         self.window = window
-        self.cache = KVCache(len(model.blocks), model.tokens_per_frame)
+        self.cache = KVCache(len(model.blocks),
+                             model.tokens_per_frame + 1)
         self.time = 0
         self.displacement = torch.zeros(2, dtype=torch.long,
                                         device=self.device)

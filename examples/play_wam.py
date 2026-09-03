@@ -35,7 +35,7 @@ from marlenv.grading.compare import PALETTE_SNAKES, unrotate_view
 from marlenv.wm.canvas import CanvasIntegrator, make_pose
 from marlenv.wm.data import to_model_input, to_pixels
 from marlenv.wm.interactive import HEADINGS, OPPOSITE
-from marlenv.wm.marunner import MultiAgentRunner
+from marlenv.wm.marunner import CachedMultiRunner, MultiAgentRunner
 from marlenv.wm.multiagent import MultiAgentWorldModel
 
 REWARD_DICT = {'fruit': 1.0, 'kill': 0.0, 'lose': -5.0, 'win': 0.0,
@@ -59,6 +59,10 @@ def parse_args():
     p.add_argument('--denoise-steps', type=int, default=12)
     p.add_argument('--action-steps', type=int, default=6)
     p.add_argument('--window', type=int, default=None)
+    p.add_argument('--no-cache', dest='use_cache', action='store_false',
+                   default=True,
+                   help='recompute the window every denoising pass instead '
+                        'of using the KV cache')
     p.add_argument('--decay', type=float, default=0.95)
     p.add_argument('--tick-ms', type=int, default=140)
     p.add_argument('--scale', type=int, default=34)
@@ -105,9 +109,11 @@ class Session:
         heads = np.array([s.head_coord for s in base.snakes], dtype=np.int64)
         origins = torch.from_numpy(heads - heads[0])[None]
 
-        self.runner = MultiAgentRunner(model, origins,
-                                       window=args.window or context,
-                                       device=device)
+        runner_class = (CachedMultiRunner if args.use_cache
+                        else MultiAgentRunner)
+        self.runner = runner_class(model, origins,
+                                   window=args.window or context,
+                                   device=device)
         # (batch, time, agents, view, view, channels)
         self.runner.reset(torch.from_numpy(
             to_model_input(views[None, None])).to(device))

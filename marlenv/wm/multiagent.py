@@ -205,3 +205,50 @@ class MultiAgentWorldModel(WorldModel):
                                  action_steps)[0][:, 0]
         is_action = self.token_types(steps, device, action_steps) == 1
         return build_mask(time, is_action, window)
+
+    # ------------------------------------------------------- cached stepping
+    def step_frame_coords(self, displacement, time, device):
+        """Coordinates for every agent's patches at one step."""
+        offsets = self.patch_offsets(device)
+        pieces = []
+        for agent in range(self.num_agents):
+            spatial = offsets + displacement[agent]
+            stamp = torch.full((spatial.shape[0], 1), time, device=device)
+            pieces.append(torch.cat([stamp, spatial], dim=-1))
+        return torch.cat(pieces).long()[None]
+
+    def step_action_coords(self, displacement, time, device):
+        """Coordinates for every agent's action at one step."""
+        stamp = torch.full((self.num_agents, 1), time, device=device)
+        return torch.cat([stamp, displacement], dim=-1).long()[None]
+
+    def frames_cached(self, frames, tau, coords, cache):
+        """Noise on one step's frames, against a cache.
+
+        No mask: everything cached is at an earlier step, and these tokens
+        are patches of the same step, which may see each other. Both are what
+        the full rule permits, so the two paths agree.
+        """
+        agents = frames.shape[2]
+        flat = frames.reshape(1, agents, *frames.shape[3:])
+        tokens = self.frame_tokens(flat, tau.reshape(1, agents))
+        x = tokens.reshape(1, agents * self.tokens_per_frame, self.dim)
+        x = x + self.type_embedding(
+            torch.zeros(1, dtype=torch.long, device=x.device))
+        cos, sin = self.rope(coords)
+        x = self.run_blocks(x, cos, sin, None, cache)
+        grouped = x.reshape(1, agents, self.tokens_per_frame, self.dim)
+        return self.unpatchify(self.to_noise(grouped))[None].reshape(
+            1, 1, agents, *frames.shape[3:])
+
+    def actions_cached(self, signal, tau, coords, cache):
+        """Noise on one step's actions, against a cache."""
+        agents = signal.shape[2]
+        x = self.action_in(signal.reshape(1, agents, -1))
+        x = x + self.action_tau(timestep_embedding(tau.reshape(1, agents),
+                                                   self.dim))
+        x = x + self.type_embedding(
+            torch.ones(1, dtype=torch.long, device=x.device))
+        cos, sin = self.rope(coords)
+        x = self.run_blocks(x, cos, sin, None, cache)
+        return self.action_out(x).reshape(1, 1, agents, -1)

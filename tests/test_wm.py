@@ -513,13 +513,13 @@ def test_cache_trims_whole_frames():
     """A frame's patches and the action after it must stay together."""
     from marlenv.wm.cache import KVCache
 
-    cache = KVCache(layers=1, tokens_per_frame=9)
+    cache = KVCache(layers=1, tokens_per_step=10)
     cache.recording = True
     for _ in range(6):
         cache.extend(0, torch.zeros(1, 2, 10, 8), torch.zeros(1, 2, 10, 8))
         cache.frames += 1
 
-    assert len(cache) == 60
+    assert len(cache) == 60      # six steps of ten tokens
     dropped = cache.trim(4)
     assert dropped == 2
     assert cache.frames == 4
@@ -768,3 +768,104 @@ def test_runner_window_clips_frames_and_actions_together():
         assert runner.actions.shape[1] == runner.frames.shape[1] - 1
 
     assert runner.frames.shape[1] == 4
+
+
+def multi_cached_prefix(model, frames, actions, origins, upto_frames,
+                        upto_actions, window=None):
+    """Build a multi-agent cache the way the runner does."""
+    from marlenv.wm.marunner import CachedMultiRunner
+    from marlenv.wm.model import HEADINGS
+
+    runner = CachedMultiRunner(model, origins, window=window, device='cpu')
+    runner.reset(frames[:, :1])
+    moves = torch.tensor([h.value for h in HEADINGS])
+    for step in range(upto_actions):
+        runner._commit_actions(actions[0, step])
+        runner.displacement = runner.displacement + moves[actions[0, step]]
+        runner.time += 1
+        runner.cache.trim(None if window is None else window - 1)
+        if step + 1 < upto_frames:
+            runner._commit_frames(frames[:, step + 1:step + 2])
+    return runner
+
+
+@pytest.mark.parametrize('window', [None, 4])
+def test_multi_cached_frames_equal_the_full_forward(window):
+    from marlenv.wm.multiagent import actions_to_signal
+
+    model = multi_model()
+    agents, steps = 3, 6
+    torch.manual_seed(1)
+    frames = torch.randn(1, steps, agents, 9, 9, 3).clamp(-1, 1)
+    indices = torch.randint(0, 4, (1, steps - 1, agents))
+    origins = torch.tensor([[[0, 0], [4, 3], [-3, 5]]])
+
+    frame_tau = torch.zeros(1, steps, agents)
+    frame_tau[:, -1] = 1.0
+    with torch.no_grad():
+        full, _ = model(frames, actions_to_signal(indices, 4), frame_tau,
+                        torch.zeros(1, steps - 1, agents), origins=origins,
+                        action_indices=indices, window=window)
+
+    runner = multi_cached_prefix(model, frames, indices, origins, steps - 1,
+                                 steps - 1, window)
+    with torch.no_grad():
+        coords = model.step_frame_coords(runner.displacement, runner.time,
+                                         'cpu')
+        cached = model.frames_cached(frames[:, -1:],
+                                     torch.ones(1, 1, agents), coords,
+                                     runner.cache)
+
+    assert torch.allclose(full[:, -1], cached[:, 0], atol=1e-4)
+
+
+def test_multi_cached_actions_equal_the_full_forward():
+    """The policy query has to agree too, not just the dynamics."""
+    from marlenv.wm.multiagent import actions_to_signal
+
+    model = multi_model()
+    agents, steps = 3, 6
+    torch.manual_seed(1)
+    frames = torch.randn(1, steps, agents, 9, 9, 3).clamp(-1, 1)
+    indices = torch.randint(0, 4, (1, steps - 1, agents))
+    origins = torch.tensor([[[0, 0], [4, 3], [-3, 5]]])
+    signal = actions_to_signal(indices, 4)
+
+    action_tau = torch.zeros(1, steps - 1, agents)
+    action_tau[:, -1] = 1.0
+    with torch.no_grad():
+        _, full = model(frames[:, :steps - 1], signal[:, :steps - 1],
+                        torch.zeros(1, steps - 1, agents), action_tau,
+                        origins=origins, action_indices=indices[:, :steps - 1])
+
+    runner = multi_cached_prefix(model, frames, indices, origins, steps - 1,
+                                 steps - 2)
+    with torch.no_grad():
+        coords = model.step_action_coords(runner.displacement, runner.time,
+                                          'cpu')
+        cached = model.actions_cached(signal[:, -1:],
+                                      torch.ones(1, 1, agents), coords,
+                                      runner.cache)
+
+    assert torch.allclose(full[:, -1], cached[:, 0], atol=1e-4)
+
+
+def test_cached_runner_holds_a_fixed_action():
+    from marlenv.wm.marunner import CachedMultiRunner
+
+    model = multi_model()
+    origins = torch.tensor([[[0, 0], [4, 3], [-3, 5]]])
+    runner = CachedMultiRunner(model, origins, window=5, device='cpu')
+    runner.reset(torch.randn(1, 1, 3, 9, 9, 3))
+
+    for _ in range(8):
+        actions, _ = runner.step(fixed={1: 3}, denoise_steps=2,
+                                 action_steps=2)
+        assert int(actions[1]) == 3
+
+    # the window bounds the cache in whole steps. A step is every agent's
+    # patches plus its action; the frame most recently generated is already
+    # committed but has no action yet, so it sits on top of that count.
+    step_tokens = 3 * (9 + 1)
+    assert runner.cache.frames <= 4          # window - 1 committed steps
+    assert len(runner.cache) == runner.cache.frames * step_tokens + 3 * 9
