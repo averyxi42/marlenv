@@ -65,6 +65,10 @@ class Snake:
         self.directions = deque(direction_list)
 
         self.alive = True
+        # counts head advances; with distance from the head this identifies
+        # a body segment by when it was created, which stays constant for
+        # that segment's lifetime
+        self.moves = 0
         self._reset_reward_state()
 
     def __len__(self):
@@ -89,6 +93,7 @@ class Snake:
 
     def move(self):
         self.head_coord += self.direction
+        self.moves += 1
         self.directions.appendleft(self.direction)
 
         prev_tail_coord = None
