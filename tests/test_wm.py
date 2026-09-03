@@ -959,7 +959,15 @@ def test_death_is_read_off_the_centre_cell():
     assert saw_a_death, 'no death occurred to check'
 
 
-def test_dead_agents_leave_the_token_stream():
+def test_dead_agents_are_retired_the_way_training_retired_them():
+    """Pinned at maximum noise, not dropped.
+
+    Training expressed "contributes nothing" by pinning a dead agent's
+    tokens at tau one, where the content is pure noise whatever is written
+    there. Dropping the tokens instead would change the token layout into
+    one the model never saw, so the step keeps its full size and the dead
+    agent simply stops moving.
+    """
     from marlenv.wm.marunner import CachedMultiRunner
 
     model = multi_model()
@@ -975,12 +983,42 @@ def test_dead_agents_leave_the_token_stream():
     before = runner.displacement[1].clone()
     runner.step(denoise_steps=1, action_steps=1)
 
-    # the newest group is still open: its frame is committed, its actions
-    # are not taken until the next step
-    assert runner.cache.step_sizes[-1] < full_step, 'dead agent still emits'
-    assert runner.cache.step_sizes[-1] == 2 * model.tokens_per_frame
+    assert runner.cache.step_sizes[-1] == full_step, 'the layout changed'
     assert torch.equal(runner.displacement[1], before), 'dead agent moved'
     assert runner.living == [0, 2]
+
+
+def test_one_bad_frame_does_not_retire_a_living_agent():
+    """Retiring is permanent, so it waits for the reading to persist.
+
+    The model paints the head it is standing on only about seven times in
+    ten; retiring on a single miss kills living agents within a few steps.
+    """
+    from marlenv.wm.marunner import CachedMultiRunner
+
+    model = multi_model()
+    origins = torch.tensor([[[0, 0], [4, 3], [-3, 5]]])
+    runner = CachedMultiRunner(model, origins, window=8, device='cpu',
+                               death_patience=3)
+    runner.reset(torch.randn(1, 1, 3, 9, 9, 3))
+
+    from marlenv.core.palette import CELL_COLORS
+    from marlenv.core.snake import Cell
+
+    wall = torch.tensor(CELL_COLORS[Cell.WALL.value][0], dtype=torch.float)
+    dead = (wall / 127.5 - 1.0).expand(1, 1, 3, 9, 9, 3).contiguous()
+
+    assert not runner.filtered_looks_dead(dead).any(), 'retired on one look'
+    assert not runner.filtered_looks_dead(dead).any()
+    assert runner.filtered_looks_dead(dead).all(), 'never retired'
+
+    # one good look clears the count, so misses have to be consecutive
+    runner.misses = [2, 2, 2]
+    head = torch.tensor(CELL_COLORS[Cell.HEAD.value][0], dtype=torch.float)
+    alive = (head / 127.5 - 1.0).expand(1, 1, 3, 9, 9, 3).contiguous()
+    runner.filtered_looks_dead(alive)
+    assert runner.misses == [0, 0, 0], 'a living look did not reset the count'
+
 
 
 def test_cache_trims_variable_sized_steps():

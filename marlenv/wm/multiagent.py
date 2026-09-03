@@ -111,9 +111,10 @@ class MultiAgentWorldModel(WorldModel):
         return displacement, heading
 
     def token_coords(self, steps, device, actions=None, origins=None,
-                     alive=None, action_steps=None):
+                     alive=None, action_steps=None, agents=None):
         """``(batch, tokens, 3)``; every token sits where its agent is."""
         offsets = self.patch_offsets(device)
+        agents = self.num_agents if agents is None else agents
         action_steps = steps - 1 if action_steps is None else action_steps
         displacement, _ = self.trajectory(actions, origins, alive,
                                           trailing=action_steps == steps)
@@ -121,27 +122,28 @@ class MultiAgentWorldModel(WorldModel):
 
         pieces = []
         for step in range(steps):
-            for agent in range(self.num_agents):
+            for agent in range(agents):
                 shift = displacement[:, step, agent]           # (b, 2)
                 spatial = offsets[None].expand(batch, -1, -1) + shift[:, None]
                 stamp = torch.full((batch, self.tokens_per_frame, 1), step,
                                    device=device)
                 pieces.append(torch.cat([stamp, spatial], dim=-1))
             if step < action_steps:
-                for agent in range(self.num_agents):
+                for agent in range(agents):
                     shift = displacement[:, step, agent]
                     stamp = torch.full((batch, 1, 1), step, device=device)
                     pieces.append(torch.cat([stamp, shift[:, None]], dim=-1))
         return torch.cat(pieces, dim=1).long()
 
-    def token_types(self, steps, device, action_steps=None):
+    def token_types(self, steps, device, action_steps=None, agents=None):
+        agents = self.num_agents if agents is None else agents
         action_steps = steps - 1 if action_steps is None else action_steps
         types = []
         for step in range(steps):
-            types.append(torch.zeros(self.num_agents * self.tokens_per_frame,
+            types.append(torch.zeros(agents * self.tokens_per_frame,
                                      device=device))
             if step < action_steps:
-                types.append(torch.ones(self.num_agents, device=device))
+                types.append(torch.ones(agents, device=device))
         return torch.cat(types).long()
 
     # --------------------------------------------------------------- forward
@@ -179,15 +181,16 @@ class MultiAgentWorldModel(WorldModel):
                     pieces.append(action_tokens[:, step, agent:agent + 1])
         x = torch.cat(pieces, dim=1)
 
-        types = self.token_types(steps, device, action_steps)
+        types = self.token_types(steps, device, action_steps, agents)
         x = x + self.type_embedding(types)[None]
 
         indices = action_indices if action_indices is not None else \
             signal_to_actions(noisy_actions)
         cos, sin = self.rope(self.token_coords(steps, device, indices,
-                                               origins, alive, action_steps))
+                                               origins, alive, action_steps,
+                                               agents))
         mask = self.attention_mask(steps, device, window, indices, origins,
-                                   alive, action_steps)
+                                   alive, action_steps, agents)
         x = self.run_blocks(x, cos, sin, mask)
 
         observed = x[:, types == 0].reshape(batch, steps, agents,
@@ -202,12 +205,14 @@ class MultiAgentWorldModel(WorldModel):
         return frame_noise, action_noise
 
     def attention_mask(self, steps, device, window=None, actions=None,
-                       origins=None, alive=None, action_steps=None):
+                       origins=None, alive=None, action_steps=None,
+                       agents=None):
         """Unchanged in rule; only the token layout differs."""
         from marlenv.wm.attention import build_mask
         time = self.token_coords(steps, device, actions, origins, alive,
-                                 action_steps)[0][:, 0]
-        is_action = self.token_types(steps, device, action_steps) == 1
+                                 action_steps, agents)[0][:, 0]
+        is_action = self.token_types(steps, device, action_steps,
+                                     agents) == 1
         return build_mask(time, is_action, window)
 
     # ------------------------------------------------------- cached stepping

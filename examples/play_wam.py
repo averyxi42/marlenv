@@ -73,7 +73,7 @@ def parse_args():
                    help='recompute the window every denoising pass instead '
                         'of using the KV cache')
     p.add_argument('--decay', type=float, default=0.95)
-    p.add_argument('--tick-ms', type=int, default=140)
+    p.add_argument('--tick-ms', type=int, default=400)
     p.add_argument('--scale', type=int, default=34)
     p.add_argument('--canvas-scale', type=int, default=16)
     p.add_argument('--side', type=int, default=15)
@@ -84,6 +84,16 @@ def parse_args():
     p.add_argument('--headless', action='store_true',
                    help='run without a window, for checking or recording')
     p.add_argument('--device', default=None)
+    p.add_argument('--num-agents', type=int, default=None,
+                   help='play with fewer snakes than the model trained on; '
+                        'identity is positional, so this is legal')
+    p.add_argument('--immortal-player', action='store_true',
+                   help='never retire the viewpoint you steer')
+    p.add_argument('--death-patience', type=int, default=3,
+                   help='consecutive frames whose centre is not a head '
+                        'before a viewpoint is retired; retiring is '
+                        'permanent, and the model does miss a head now and '
+                        'then, so one look is not enough')
     return p.parse_args()
 
 
@@ -128,13 +138,16 @@ def build_solver(args, num_actions):
 class Session:
     """A world action rollout beside the real simulator."""
 
-    def __init__(self, args, model, context, device, seed):
+    def __init__(self, args, model, context, device, seed, num_agents=None,
+                 immortal_agents=None):
         self.args = args
         self.device = device
         self.agent = args.agent
+        if num_agents is None:
+            num_agents = model.num_agents
         self.env = gym.make(
             'Snake-v1', height=args.side, width=args.side,
-            num_snakes=model.num_agents, num_fruits=args.num_fruits,
+            num_snakes=num_agents, num_fruits=args.num_fruits,
             reward_dict=REWARD_DICT, view_radius=args.view_radius,
             observation_noise=2.0, snake_noise_sigma=8.0,
             background_gradient=16.0, obstacle_density=args.obstacle_density,
@@ -150,7 +163,10 @@ class Session:
                         else MultiAgentRunner)
         self.runner = runner_class(model, origins,
                                    window=args.window or context,
-                                   device=device)
+                                   device=device,
+                                   num_agents=num_agents,
+                                   immortal_agents=immortal_agents,
+                                   death_patience=args.death_patience)
         # (batch, time, agents, view, view, channels)
         self.runner.reset(torch.from_numpy(
             to_model_input(views[None, None])).to(device))
@@ -355,7 +371,9 @@ def main():
            else f'you steer agent {args.agent}')
     print(f'agents: {model.num_agents}   context: {context}   {who}')
 
-    session = Session(args, model, context, device, args.seed)
+    immortal = [args.agent] if args.immortal_player else None
+    session = Session(args, model, context, device, args.seed,
+                      args.num_agents, immortal_agents=immortal)
 
     if args.headless:
         frames = run_headless(session, args)
@@ -376,8 +394,9 @@ def main():
             pygame.K_LEFT: Direction.LEFT, pygame.K_a: Direction.LEFT,
             pygame.K_RIGHT: Direction.RIGHT, pygame.K_d: Direction.RIGHT}
 
-    pending, snapped, paused, running = None, True, True, True
+    snapped, paused, running = True, True, True
     frames, last_move = [], 0.0
+    pending = session.headings[session.agent]
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -400,8 +419,11 @@ def main():
 
         now = time.time()
         if not paused and (now - last_move) * 1000 >= args.tick_ms:
+            # pending is deliberately kept: a snake carries on in the
+            # direction it was going. Clearing it would leave the player's
+            # action to be sampled by the model on every tick without a
+            # keypress, which reads as the snake steering itself
             session.step(pending)
-            pending = None
             last_move = now
 
         sheet, names = compose(session, args, snapped)
