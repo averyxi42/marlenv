@@ -2,12 +2,34 @@
 
 Generated, not tracked — everything here rebuilds from a seed.
 
-## Episodes (HuggingFace dataset)
+## Episodes (HuggingFace datasets)
+
+Components are collected separately so training recipes can mix them in
+whatever proportion; mixing at collection time bakes in a ratio that cannot
+be undone.
 
 ```bash
-python examples/collect_dataset.py --episodes 64 --out marlenv/demodata/episodes
-python examples/collect_dataset.py --episodes 64 --checkpoint az_obs_latest.pt
+CK=az_obs_latest.pt
+python examples/collect_dataset.py --preset expert  --episodes 1200 --workers 20 --checkpoint $CK
+python examples/collect_dataset.py --preset explore --episodes 1500 --workers 20 --checkpoint $CK
 ```
+
+Both on a fixed 15x15 board, 3 agents, view radius 4, 12% obstacles, with
+the search policy at 16 simulations and `max_joint_actions=4`.
+
+| component | episodes | transitions | agent frames | steps/ep | deaths/ep | return |
+| --- | --- | --- | --- | --- | --- | --- |
+| `expert` | 1200 | 95,976 | 287,928 | 80.0 | 0.72 | +18.6 |
+| `explore` | 1500 | 102,965 | 308,895 | 70.5 | 2.33 | -0.4 |
+
+`explore` is the same policy with 15% random actions. It is not just noisier
+expert data: three times the deaths, so it carries the collision dynamics a
+model trained only on expert trajectories would never see.
+
+A `random` preset exists but was not collected -- with obstacles it dies in
+about 11 steps with every snake gone, which is mostly initial-state-then-death
+and too short to be useful to a sequence model. `explore` covers that ground
+with far richer trajectories.
 
 One row per multi-agent episode. Every per-frame column shares the leading
 frame axis `N = steps + 1`; the terminal frame is kept because a world model
