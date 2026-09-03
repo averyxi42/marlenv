@@ -114,15 +114,52 @@ def palette_entries(num_snakes):
     return np.array(values), np.array(colors)
 
 
+def nearest_class(frame, num_snakes):
+    """Index of the closest palette colour for every pixel."""
+    _, colors = palette_entries(num_snakes)
+    diff = frame.astype(np.float64)[:, :, None, :] - colors[None, None]
+    return np.argmin((diff ** 2).sum(axis=-1), axis=-1)
+
+
 def decode_grid(frame, num_snakes):
     """Recover the grid from a rendered frame by nearest class colour.
 
     This is the grading path: run it on a world model's generated frame and
     compare with the true grid.
     """
-    values, colors = palette_entries(num_snakes)
-    diff = frame.astype(np.float64)[:, :, None, :] - colors[None, None]
-    return values[np.argmin((diff ** 2).sum(axis=-1), axis=-1)]
+    values, _ = palette_entries(num_snakes)
+    return values[nearest_class(frame, num_snakes)]
+
+
+def snap_to_palette(frame, num_snakes):
+    """Quantise a frame onto the palette, removing noise and gradient.
+
+    Two frames that mean the same thing snap to identical pixels, so a
+    prediction and the truth can be compared exactly rather than by a
+    tolerance that would have to be tuned against the noise level.
+    """
+    _, colors = palette_entries(num_snakes)
+    return colors[nearest_class(frame, num_snakes)].astype(np.uint8)
+
+
+def class_labels(num_snakes):
+    """Readable name per palette class, ordered as :func:`palette_entries`."""
+    values, _ = palette_entries(num_snakes)
+    labels = []
+    for value in values:
+        kind, snake_id = int(value) % 10, int(value) // 10
+        name = Cell(kind).name.lower()
+        labels.append(name if kind not in SNAKE_KINDS else f'{name}{snake_id}')
+    return labels
+
+
+def class_index(values, num_snakes):
+    """Map raw grid values onto palette class indices."""
+    table, _ = palette_entries(num_snakes)
+    lookup = {int(v): i for i, v in enumerate(table)}
+    flat = np.asarray(values).reshape(-1)
+    return np.array([lookup[int(v)] for v in flat]).reshape(
+        np.asarray(values).shape)
 
 
 def gradient_shift(amplitude):
