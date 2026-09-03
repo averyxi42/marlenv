@@ -56,6 +56,15 @@ def parse_args():
     p.add_argument('--steps', type=int, default=120,
                    help='length of an autonomous or demo run')
     p.add_argument('--seed', type=int, default=0)
+    p.add_argument('--bootstrap', type=int, default=1,
+                   help='frames of real, searched play fed in before the '
+                        'model takes over; 1 hands over immediately')
+    p.add_argument('--checkpoint', default=None,
+                   help='AlphaZero network guiding the bootstrap search; '
+                        'without one the search uses random rollouts')
+    p.add_argument('--bootstrap-sims', type=int, default=48,
+                   help='simulations per bootstrap move')
+    p.add_argument('--rollout-depth', type=int, default=10)
     p.add_argument('--denoise-steps', type=int, default=12)
     p.add_argument('--action-steps', type=int, default=6)
     p.add_argument('--window', type=int, default=None)
@@ -86,6 +95,34 @@ def load_model(path, device):
         dim=state['dim'], depth=state['depth'], heads=state['heads'])
     model.load_state_dict(state['model'])
     return model.to(device).eval(), state.get('context', 24)
+
+
+def build_solver(args, num_actions):
+    """The search that plays the bootstrap prefix.
+
+    The prefix is what the model continues from, so it is also a way to ask
+    for a particular kind of play: a searched prefix elicits searched play,
+    where a random one elicits flailing. That matters here because the
+    training mixture holds both.
+    """
+    from marlenv.policies import AlphaZeroSolver, RolloutEvaluator
+
+    if args.checkpoint:
+        from marlenv.policies import NetworkEvaluator, SnakeNet
+        state = torch.load(args.checkpoint, map_location='cpu',
+                           weights_only=False)
+        net = SnakeNet(channels=state.get('channels', 32),
+                       blocks=state.get('blocks', 2))
+        net.load_state_dict(state['model'])
+        evaluator = NetworkEvaluator(net, device=args.device)
+    else:
+        evaluator = RolloutEvaluator(num_actions,
+                                     rollout_depth=args.rollout_depth,
+                                     seed=args.seed)
+    return AlphaZeroSolver(evaluator, objective='sum',
+                           num_simulations=args.bootstrap_sims,
+                           max_depth=6, max_joint_actions=32,
+                           exploration_fraction=0.0, seed=args.seed)
 
 
 class Session:
@@ -127,12 +164,54 @@ class Session:
         self.alive = True
         self.steps = 0
         self.generator = torch.Generator(device=device).manual_seed(seed)
+        if args.bootstrap > 1:
+            self.prefill(args.bootstrap - 1)
 
     def observe(self):
         """Every agent's view, north-up."""
         base = self.env.unwrapped
         return np.stack([unrotate_view(v, s.direction) for v, s
                          in zip(base.egocentric_rgb(), base.snakes)])
+
+    def prefill(self, steps):
+        """Play real steps into the context before the model takes over.
+
+        The frames and actions are the simulator's, but they enter the
+        context by the same route a generated step does, so the model
+        cannot tell where the prefix ends. Two things come of it: a longer
+        history to condition on, which steadies what follows, and control
+        over which policy the rollout continues.
+
+        The canvas is painted as this runs, so what it shows is what the
+        model actually has in context rather than only the dreamt part.
+        """
+        base = self.env.unwrapped
+        solver = build_solver(self.args, len(base.action_dict))
+        for _ in range(steps):
+            if not self.alive:
+                break
+            _, _, terminated, truncated, _ = self.env.step(solver.solve(
+                self.env))
+            self.alive = not (all(terminated) or all(truncated))
+
+            # read the poses back rather than dead reckoning them: after a
+            # death the simulator's head is already the aftermath viewpoint,
+            # which is exactly what the observation is centred on
+            self.headings = [snake.direction for snake in base.snakes]
+            self.poses = [make_pose(snake.head_coord[0], snake.head_coord[1],
+                                    snake.direction)
+                          for snake in base.snakes]
+            live = torch.tensor([snake.alive for snake in base.snakes],
+                                dtype=torch.bool, device=self.device)
+            actions = torch.tensor([HEADINGS.index(h) for h in self.headings],
+                                   dtype=torch.long, device=self.device)
+
+            views = self.observe()
+            frame = torch.from_numpy(
+                to_model_input(views[None, None])).to(self.device)
+            self.runner.observe(actions, frame, live)
+            self.paint(views)
+            self.steps += 1
 
     def dream(self, agent=None):
         """The frames the model just generated, as north-up pixels.

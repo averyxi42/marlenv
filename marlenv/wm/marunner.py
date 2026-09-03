@@ -159,6 +159,17 @@ class MultiAgentRunner:
         self.commit(actions, frame, self.alive[:, -1].reshape(-1) & ~died)
         return actions, frame
 
+    @torch.no_grad()
+    def observe(self, actions, frame, alive=None):
+        """Absorb a real transition instead of a generated one.
+
+        This is how a rollout is given a prefix of real history: the frames
+        and actions come from the simulator rather than the model, but they
+        enter the context by exactly the same route.
+        """
+        self.commit(actions.view(1, 1, self.num_agents), frame, alive)
+        return actions, frame
+
 
 SNAKE_KINDS = (Cell.HEAD.value, Cell.BODY.value, Cell.TAIL.value)
 
@@ -320,7 +331,24 @@ class CachedMultiRunner(MultiAgentRunner):
         actions = self.sample_actions(fixed, action_steps, generator)
         self._commit_actions(actions)
         frame = self.generate_frame(actions, denoise_steps, generator)
+        self._absorb(actions, frame)
+        return actions, frame
 
+    @torch.no_grad()
+    def observe(self, actions, frame, alive=None):
+        """Absorb a real transition instead of a generated one.
+
+        Same route into the cache as a generated step takes, so a prefix of
+        real history and the rollout that follows it are indistinguishable
+        to the model. Aliveness is known here rather than read off the
+        frame, so it is passed in.
+        """
+        self._commit_actions(actions)
+        self._absorb(actions, frame, alive)
+        return actions, frame
+
+    def _absorb(self, actions, frame, alive=None):
+        """Advance the geometry and commit one step's frames."""
         moves = torch.tensor([h.value for h in HEADINGS], device=self.device)
         step_move = moves[actions]
         for agent in range(self.num_agents):
@@ -329,8 +357,10 @@ class CachedMultiRunner(MultiAgentRunner):
         self.displacement = self.displacement + step_move
         self.time += 1
 
-        # death is a property of the observation: read it off the centre cell
-        died = looks_dead(frame[0, 0])
+        # death is a property of the observation: read it off the centre
+        # cell, unless the caller already knows who is alive
+        died = (looks_dead(frame[0, 0]) if alive is None
+                else ~torch.as_tensor(alive, device=self.device).reshape(-1))
         for agent in range(self.num_agents):
             if self.live[agent] and bool(died[agent]):
                 self.live[agent] = False
@@ -347,4 +377,3 @@ class CachedMultiRunner(MultiAgentRunner):
             self.frames = self.frames[:, drop:]
             self.actions = self.actions[:, drop:]
             self.alive = self.alive[:, drop:]
-        return actions, frame
