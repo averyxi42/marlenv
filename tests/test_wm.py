@@ -706,3 +706,65 @@ def test_noise_broadcast_handles_frames_and_actions():
         assert noisy.shape == clean.shape
         assert torch.allclose(back, clean, atol=1e-5)
         assert torch.allclose(back_noise, noise, atol=1e-5)
+
+
+def test_trailing_action_slot_is_a_policy_query():
+    """One action per frame, the last asking what to do now."""
+    from marlenv.wm.multiagent import actions_to_signal
+
+    model = multi_model()
+    frames = torch.randn(1, 4, 3, 9, 9, 3)
+    for slots in (3, 4):
+        indices = torch.randint(0, 4, (1, slots, 3))
+        with torch.no_grad():
+            _, actions = model(frames, actions_to_signal(indices, 4),
+                               torch.rand(1, 4, 3), torch.rand(1, slots, 3),
+                               action_indices=indices)
+        assert actions.shape == (1, slots, 3, 4)
+
+
+def test_a_pending_action_does_not_move_anything_yet():
+    """Its coordinates must not depend on a value not yet decided."""
+    model = multi_model()
+    indices = torch.randint(0, 4, (1, 4, 3))
+    other = indices.clone()
+    other[:, -1] = (indices[:, -1] + 1) % 4
+
+    first = model.token_coords(4, 'cpu', indices, action_steps=4)
+    second = model.token_coords(4, 'cpu', other, action_steps=4)
+
+    assert torch.equal(first, second)
+
+
+def test_runner_holds_a_fixed_action_and_samples_the_rest():
+    from marlenv.wm.marunner import MultiAgentRunner
+
+    model = multi_model()
+    origins = torch.tensor([[[0, 0], [4, 3], [-3, 5]]])
+    runner = MultiAgentRunner(model, origins, window=6, device='cpu')
+    runner.reset(torch.randn(1, 1, 3, 9, 9, 3))
+
+    for _ in range(4):
+        actions, frame = runner.step(fixed={0: 2}, denoise_steps=2,
+                                     action_steps=2)
+        assert int(actions[0]) == 2, 'the held action was not respected'
+        assert actions.shape == (3,)
+        assert frame.shape == (1, 1, 3, 9, 9, 3)
+
+    assert runner.frames.shape[1] == 5
+    assert runner.actions.shape[1] == 4
+
+
+def test_runner_window_clips_frames_and_actions_together():
+    from marlenv.wm.marunner import MultiAgentRunner
+
+    model = multi_model()
+    origins = torch.zeros(1, 3, 2, dtype=torch.long)
+    runner = MultiAgentRunner(model, origins, window=4, device='cpu')
+    runner.reset(torch.randn(1, 1, 3, 9, 9, 3))
+
+    for _ in range(8):
+        runner.step(denoise_steps=1, action_steps=1)
+        assert runner.actions.shape[1] == runner.frames.shape[1] - 1
+
+    assert runner.frames.shape[1] == 4

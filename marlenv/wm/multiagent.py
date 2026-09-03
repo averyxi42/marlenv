@@ -61,7 +61,8 @@ class MultiAgentWorldModel(WorldModel):
         return self.num_agents * (self.tokens_per_frame + 1)
 
     # ------------------------------------------------------------- geometry
-    def trajectory(self, actions, origins=None, alive=None):
+    def trajectory(self, actions, origins=None, alive=None,
+                   trailing=False):
         """Per-agent displacement and heading, in one shared frame.
 
         ``actions`` is ``(b, t - 1, agents)`` of action indices and
@@ -78,7 +79,10 @@ class MultiAgentWorldModel(WorldModel):
         """
         batch, transitions, agents = actions.shape
         device = actions.device
-        steps = transitions + 1
+        # a trailing action -- one per frame rather than one per gap -- is
+        # how a policy is asked what to do *now*; it moves nothing yet
+        steps = transitions if trailing else transitions + 1
+        moves_used = steps - 1
 
         if origins is None:
             origins = torch.zeros(batch, agents, 2, dtype=torch.long,
@@ -90,7 +94,7 @@ class MultiAgentWorldModel(WorldModel):
                               device=device)
         moves = torch.tensor([h.value for h in HEADINGS], device=device)
 
-        for step in range(transitions):
+        for step in range(moves_used):
             nxt = actions[:, step]                 # cardinal index per agent
             step_move = moves[nxt]
             if alive is not None:
@@ -103,10 +107,12 @@ class MultiAgentWorldModel(WorldModel):
         return displacement, heading
 
     def token_coords(self, steps, device, actions=None, origins=None,
-                     alive=None):
+                     alive=None, action_steps=None):
         """``(batch, tokens, 3)``; every token sits where its agent is."""
         offsets = self.patch_offsets(device)
-        displacement, _ = self.trajectory(actions, origins, alive)
+        action_steps = steps - 1 if action_steps is None else action_steps
+        displacement, _ = self.trajectory(actions, origins, alive,
+                                          trailing=action_steps == steps)
         batch = displacement.shape[0]
 
         pieces = []
@@ -117,19 +123,20 @@ class MultiAgentWorldModel(WorldModel):
                 stamp = torch.full((batch, self.tokens_per_frame, 1), step,
                                    device=device)
                 pieces.append(torch.cat([stamp, spatial], dim=-1))
-            if step < steps - 1:
+            if step < action_steps:
                 for agent in range(self.num_agents):
                     shift = displacement[:, step, agent]
                     stamp = torch.full((batch, 1, 1), step, device=device)
                     pieces.append(torch.cat([stamp, shift[:, None]], dim=-1))
         return torch.cat(pieces, dim=1).long()
 
-    def token_types(self, steps, device):
+    def token_types(self, steps, device, action_steps=None):
+        action_steps = steps - 1 if action_steps is None else action_steps
         types = []
         for step in range(steps):
             types.append(torch.zeros(self.num_agents * self.tokens_per_frame,
                                      device=device))
-            if step < steps - 1:
+            if step < action_steps:
                 types.append(torch.ones(self.num_agents, device=device))
         return torch.cat(types).long()
 
@@ -146,6 +153,7 @@ class MultiAgentWorldModel(WorldModel):
         """
         batch, steps, agents = noisy_frames.shape[:3]
         device = noisy_frames.device
+        action_steps = noisy_actions.shape[1]
 
         flat = noisy_frames.reshape(batch, steps * agents,
                                     *noisy_frames.shape[3:])
@@ -162,20 +170,20 @@ class MultiAgentWorldModel(WorldModel):
         for step in range(steps):
             for agent in range(agents):
                 pieces.append(patches[:, step, agent])
-            if step < steps - 1:
+            if step < action_steps:
                 for agent in range(agents):
                     pieces.append(action_tokens[:, step, agent:agent + 1])
         x = torch.cat(pieces, dim=1)
 
-        types = self.token_types(steps, device)
+        types = self.token_types(steps, device, action_steps)
         x = x + self.type_embedding(types)[None]
 
         indices = action_indices if action_indices is not None else \
             signal_to_actions(noisy_actions)
         cos, sin = self.rope(self.token_coords(steps, device, indices,
-                                               origins, alive))
+                                               origins, alive, action_steps))
         mask = self.attention_mask(steps, device, window, indices, origins,
-                                   alive)
+                                   alive, action_steps)
         x = self.run_blocks(x, cos, sin, mask)
 
         observed = x[:, types == 0].reshape(batch, steps, agents,
@@ -186,14 +194,14 @@ class MultiAgentWorldModel(WorldModel):
         frame_noise = frame_noise.reshape(batch, steps, agents,
                                           *frame_noise.shape[2:])
         action_noise = self.action_out(x[:, types == 1]).reshape(
-            batch, steps - 1, agents, -1)
+            batch, action_steps, agents, -1)
         return frame_noise, action_noise
 
     def attention_mask(self, steps, device, window=None, actions=None,
-                       origins=None, alive=None):
+                       origins=None, alive=None, action_steps=None):
         """Unchanged in rule; only the token layout differs."""
         from marlenv.wm.attention import build_mask
-        time = self.token_coords(steps, device, actions, origins,
-                                 alive)[0][:, 0]
-        is_action = self.token_types(steps, device) == 1
+        time = self.token_coords(steps, device, actions, origins, alive,
+                                 action_steps)[0][:, 0]
+        is_action = self.token_types(steps, device, action_steps) == 1
         return build_mask(time, is_action, window)
