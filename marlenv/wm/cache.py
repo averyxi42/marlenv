@@ -21,6 +21,9 @@ class KVCache:
         self.values = [None] * layers
         self.recording = False
         self.frames = 0
+        # tokens contributed by each committed step; a step is not a fixed
+        # size once agents can drop out of the sequence
+        self.step_sizes = []
 
     def __len__(self):
         return 0 if self.keys[0] is None else self.keys[0].shape[2]
@@ -29,6 +32,7 @@ class KVCache:
         self.keys = [None] * self.layers
         self.values = [None] * self.layers
         self.frames = 0
+        self.step_sizes = []
 
     def extend(self, layer, key, value):
         """Return the full key/value for this layer, recording if asked.
@@ -49,17 +53,37 @@ class KVCache:
             self.values[layer] = full_value
         return full_key, full_value
 
-    def trim(self, max_frames):
-        """Drop whole frames off the front, oldest first.
+    def open_step(self, tokens):
+        """Begin a step with the frame tokens that lead it."""
+        self.step_sizes.append(int(tokens))
 
-        Trimming in frame units keeps a frame's patches and the action that
-        follows them together; splitting them would leave the model an
-        action whose frame it cannot see.
+    def close_step(self, tokens):
+        """Complete a step with the actions that follow its frame.
+
+        A step is a frame together with the actions taken from it, so the two
+        are recorded as one group and trimming can never separate them.
+        """
+        if not self.step_sizes:
+            self.step_sizes.append(0)
+        self.step_sizes[-1] += int(tokens)
+        self.frames += 1
+
+    def trim(self, max_frames):
+        """Drop whole steps off the front, oldest first.
+
+        Trimming in step units keeps a step's patches and the actions that
+        follow them together; splitting them would leave the model an action
+        whose frame it cannot see. Sizes are recorded per step rather than
+        assumed, since a step shrinks as agents die out of the sequence.
         """
         if max_frames is None or self.frames <= max_frames:
             return 0
         drop_frames = self.frames - max_frames
-        drop_tokens = drop_frames * self.tokens_per_step
+        if self.step_sizes:
+            drop_tokens = sum(self.step_sizes[:drop_frames])
+            self.step_sizes = self.step_sizes[drop_frames:]
+        else:
+            drop_tokens = drop_frames * self.tokens_per_step
         for layer in range(self.layers):
             if self.keys[layer] is not None:
                 self.keys[layer] = self.keys[layer][:, :, drop_tokens:]

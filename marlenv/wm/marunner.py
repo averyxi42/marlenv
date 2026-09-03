@@ -9,8 +9,11 @@ first breaks that circularity; denoising both at once could not.
 A human's action is held fixed by overwriting it at every denoising step,
 which conditions the sample on it while the others are free.
 """
+import numpy as np
 import torch
 
+from marlenv.core.palette import EMPTY_RGB
+from marlenv.wm.data import to_model_input
 from marlenv.wm.diffusion import alpha_sigma, from_velocity
 from marlenv.wm.model import HEADINGS
 from marlenv.wm.multiagent import actions_to_signal, signal_to_actions
@@ -153,6 +156,19 @@ class MultiAgentRunner:
         return actions, frame
 
 
+def looks_dead(frame, empty_reference):
+    """Is this frame the black one the model predicts on death?
+
+    Compared against the empty-cell colour rather than to a threshold: an
+    agent staring at nothing but empty space is nearly black too, and the
+    two are only a sixth of the range apart. Nearest prototype separates
+    them without a constant to tune.
+    """
+    to_black = (frame + 1.0).abs().mean(dim=(-3, -2, -1))
+    to_empty = (frame - empty_reference).abs().mean(dim=(-3, -2, -1))
+    return to_black < to_empty
+
+
 class CachedMultiRunner(MultiAgentRunner):
     """The same rollout, against a sliding-window KV cache.
 
@@ -175,39 +191,67 @@ class CachedMultiRunner(MultiAgentRunner):
         self.cache = KVCache(len(model.blocks), tokens)
         self.time = 0
         self.displacement = None
+        self.live = None
+        empty = to_model_input(np.array(EMPTY_RGB, dtype=np.uint8))
+        self.empty_reference = torch.tensor(empty, dtype=torch.float32,
+                                            device=self.device)
 
     def reset(self, frame):
         super().reset(frame)
         self.cache.reset()
         self.time = 0
         self.displacement = self.origins[0].clone()
+        self.live = [True] * self.num_agents
         self._commit_frames(frame)
 
+    @property
+    def living(self):
+        return [i for i, alive in enumerate(self.live) if alive]
+
     def _commit_frames(self, frame):
+        """Write the living agents' patches; the dead contribute nothing."""
         from marlenv.wm.cache import recording
+        agents = self.living
+        if not agents:
+            self.cache.open_step(0)
+            return 0
         coords = self.model.step_frame_coords(self.displacement, self.time,
-                                              self.device)
-        tau = torch.zeros(1, 1, self.num_agents, device=self.device)
+                                              self.device, agents)
+        subset = frame[:, :, agents]
+        tau = torch.zeros(1, 1, len(agents), device=self.device)
         with recording(self.cache):
-            self.model.frames_cached(frame, tau, coords, self.cache)
+            self.model.frames_cached(subset, tau, coords, self.cache)
+        tokens = len(agents) * self.model.tokens_per_frame
+        self.cache.open_step(tokens)
+        return tokens
 
     def _commit_actions(self, actions):
         from marlenv.wm.cache import recording
+        agents = self.living
+        if not agents:
+            self.cache.close_step(0)
+            return 0
         coords = self.model.step_action_coords(self.displacement, self.time,
-                                               self.device)
-        signal = actions_to_signal(actions.view(1, 1, self.num_agents),
-                                   self.num_actions)
-        tau = torch.zeros(1, 1, self.num_agents, device=self.device)
+                                               self.device, agents)
+        chosen = actions.view(-1)[agents].view(1, 1, len(agents))
+        signal = actions_to_signal(chosen, self.num_actions)
+        tau = torch.zeros(1, 1, len(agents), device=self.device)
         with recording(self.cache):
             self.model.actions_cached(signal, tau, coords, self.cache)
-        self.cache.frames += 1
+        self.cache.close_step(len(agents))
+        return len(agents)
 
     @torch.no_grad()
     def sample_actions(self, fixed=None, denoise_steps=6, generator=None):
-        shape = (1, 1, self.num_agents, self.num_actions)
+        agents = self.living
+        full = torch.zeros(self.num_agents, dtype=torch.long,
+                           device=self.device)
+        if not agents:
+            return full
+        shape = (1, 1, len(agents), self.num_actions)
         signal = torch.randn(shape, device=self.device, generator=generator)
         coords = self.model.step_action_coords(self.displacement, self.time,
-                                               self.device)
+                                               self.device, agents)
         levels = torch.linspace(1.0, 0.0, denoise_steps + 1,
                                 device=self.device)
 
@@ -215,13 +259,14 @@ class CachedMultiRunner(MultiAgentRunner):
             if not fixed:
                 return
             for agent, action in fixed.items():
-                signal[0, 0, agent] = actions_to_signal(
-                    torch.tensor(action, device=self.device),
-                    self.num_actions)
+                if agent in agents:
+                    signal[0, 0, agents.index(agent)] = actions_to_signal(
+                        torch.tensor(action, device=self.device),
+                        self.num_actions)
 
         for index in range(denoise_steps):
             hold()
-            tau = torch.full((1, 1, self.num_agents), float(levels[index]),
+            tau = torch.full((1, 1, len(agents)), float(levels[index]),
                              device=self.device)
             predicted = self.model.actions_cached(signal, tau, coords,
                                                   self.cache)
@@ -230,21 +275,28 @@ class CachedMultiRunner(MultiAgentRunner):
             alpha, sigma = alpha_sigma(levels[index + 1])
             signal = alpha * clean + sigma * noise
         hold()
-        return signal_to_actions(signal)[0, 0].long()
+        full[agents] = signal_to_actions(signal)[0, 0].long()
+        return full
 
     @torch.no_grad()
     def generate_frame(self, actions, denoise_steps=16, generator=None):
+        agents = self.living
+        shape = (1, 1, self.num_agents, *self.frames.shape[3:])
+        out = torch.full(shape, -1.0, device=self.device)   # dead read black
+        if not agents:
+            return out
+
         moves = torch.tensor([h.value for h in HEADINGS], device=self.device)
         nxt = self.displacement + moves[actions]
         coords = self.model.step_frame_coords(nxt, self.time + 1,
-                                              self.device)
-        shape = (1, 1, self.num_agents, *self.frames.shape[3:])
-        frame = torch.randn(shape, device=self.device, generator=generator)
+                                              self.device, agents)
+        frame = torch.randn((1, 1, len(agents), *self.frames.shape[3:]),
+                            device=self.device, generator=generator)
         levels = torch.linspace(1.0, 0.0, denoise_steps + 1,
                                 device=self.device)
 
         for index in range(denoise_steps):
-            tau = torch.full((1, 1, self.num_agents), float(levels[index]),
+            tau = torch.full((1, 1, len(agents)), float(levels[index]),
                              device=self.device)
             predicted = self.model.frames_cached(frame, tau, coords,
                                                  self.cache)
@@ -252,7 +304,8 @@ class CachedMultiRunner(MultiAgentRunner):
             clean = clean.clamp(-1.0, 1.0)
             alpha, sigma = alpha_sigma(levels[index + 1])
             frame = alpha * clean + sigma * noise
-        return frame
+        out[:, :, agents] = frame
+        return out
 
     def step(self, fixed=None, denoise_steps=16, action_steps=6,
              generator=None):
@@ -261,14 +314,26 @@ class CachedMultiRunner(MultiAgentRunner):
         frame = self.generate_frame(actions, denoise_steps, generator)
 
         moves = torch.tensor([h.value for h in HEADINGS], device=self.device)
-        self.displacement = self.displacement + moves[actions]
+        step_move = moves[actions]
+        for agent in range(self.num_agents):
+            if not self.live[agent]:
+                step_move[agent] = 0
+        self.displacement = self.displacement + step_move
         self.time += 1
+
+        # the black frame is the model's own death signal, so read it back
+        died = looks_dead(frame[0, 0], self.empty_reference)
+        for agent in range(self.num_agents):
+            if self.live[agent] and bool(died[agent]):
+                self.live[agent] = False
+
         self.cache.trim(None if self.window is None else self.window - 1)
         self._commit_frames(frame)
 
         self.actions = self._pad_actions(actions.view(1, 1, self.num_agents))
         self.frames = torch.cat([self.frames, frame], dim=1)
-        self.alive = torch.cat([self.alive, self.alive[:, -1:]], dim=1)
+        live = torch.tensor(self.live, device=self.device).view(1, 1, -1)
+        self.alive = torch.cat([self.alive, live], dim=1)
         if self.window is not None and self.frames.shape[1] > self.window:
             drop = self.frames.shape[1] - self.window
             self.frames = self.frames[:, drop:]

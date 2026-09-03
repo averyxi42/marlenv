@@ -19,10 +19,21 @@ def multi_training_loss(model, frames, actions, alive, trained, origins,
     batch, steps, agents = frames.shape[:3]
     device = frames.device
 
+    action_mask = alive[:, :-1] & alive[:, 1:]
+
     frame_tau = torch.rand(batch, steps, agents, device=device,
                            generator=generator)
     action_tau = torch.rand(batch, steps - 1, agents, device=device,
                             generator=generator)
+    # A dead agent contributes nothing, expressed the way diffusion forcing
+    # already expresses "no information": pin its tokens at the maximum
+    # noise level, where alpha is zero and the input is pure noise whatever
+    # was written there. Without this the model is fed a dead agent's stored
+    # action, which is an all-zero one-hot that argmax reads as UP -- a
+    # confident claim about an agent that did not act.
+    frame_tau = torch.where(trained, frame_tau, torch.ones_like(frame_tau))
+    action_tau = torch.where(action_mask, action_tau,
+                             torch.ones_like(action_tau))
 
     frame_noise = torch.randn(frames.shape, device=device,
                               generator=generator)
@@ -48,9 +59,9 @@ def multi_training_loss(model, frames, actions, alive, trained, origins,
 
     action_error = ((predicted_actions - action_target) ** 2).mean(dim=-1)
     # only train an action the agent was alive to take
-    action_mask = (alive[:, :-1] & alive[:, 1:]).float()
-    action_loss = ((action_error * action_mask).sum()
-                   / action_mask.sum().clamp(min=1))
+    weights = action_mask.float()
+    action_loss = ((action_error * weights).sum()
+                   / weights.sum().clamp(min=1))
 
     return frame_loss + action_weight * action_loss, frame_loss, action_loss
 

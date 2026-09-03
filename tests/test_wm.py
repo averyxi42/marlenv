@@ -517,7 +517,8 @@ def test_cache_trims_whole_frames():
     cache.recording = True
     for _ in range(6):
         cache.extend(0, torch.zeros(1, 2, 10, 8), torch.zeros(1, 2, 10, 8))
-        cache.frames += 1
+        cache.open_step(10)
+        cache.close_step(0)
 
     assert len(cache) == 60      # six steps of ten tokens
     dropped = cache.trim(4)
@@ -869,3 +870,103 @@ def test_cached_runner_holds_a_fixed_action():
     step_tokens = 3 * (9 + 1)
     assert runner.cache.frames <= 4          # window - 1 committed steps
     assert len(runner.cache) == runner.cache.frames * step_tokens + 3 * 9
+
+
+# ------------------------------------------------------------ dead agents
+def test_dead_agents_are_pinned_at_maximum_noise():
+    """Diffusion forcing already has a way to say 'no information here'."""
+    from marlenv.wm.diffusion import add_noise
+
+    torch.manual_seed(0)
+    clean = torch.full((1, 3, 2, 4), 0.5)
+    noise = torch.randn_like(clean)
+    tau = torch.ones(1, 3, 2)
+
+    # at tau = 1 alpha is zero, so the content is the noise whatever it was
+    assert torch.allclose(add_noise(clean, tau, noise), noise, atol=1e-6)
+
+
+def test_training_pins_dead_agent_tokens():
+    """A dead agent's stored action is an all-zero one-hot, read as UP."""
+    from marlenv.wm.matrain import multi_training_loss
+
+    model = multi_model()
+    torch.manual_seed(0)
+    frames = torch.randn(2, 5, 3, 9, 9, 3).clamp(-1, 1)
+    actions = torch.randint(0, 4, (2, 4, 3))
+    alive = torch.ones(2, 5, 3, dtype=torch.bool)
+    alive[:, 3:, 1] = False
+    trained = alive.clone()
+    origins = torch.zeros(2, 3, 2, dtype=torch.long)
+
+    # the loss must not move when a dead agent's frames are replaced
+    generator = torch.Generator().manual_seed(7)
+    first = multi_training_loss(model, frames, actions, alive, trained,
+                                origins, generator=generator)[0]
+    scrambled = frames.clone()
+    scrambled[:, 3:, 1] = torch.randn_like(scrambled[:, 3:, 1])
+    generator = torch.Generator().manual_seed(7)
+    second = multi_training_loss(model, scrambled, actions, alive, trained,
+                                 origins, generator=generator)[0]
+
+    assert first.item() == pytest.approx(second.item(), rel=1e-5)
+
+
+def test_black_frame_is_told_from_an_empty_view():
+    """Both are nearly black; a tuned threshold would not separate them."""
+    import numpy as np
+    from marlenv.core.palette import EMPTY_RGB
+    from marlenv.wm.data import to_model_input
+    from marlenv.wm.marunner import looks_dead
+
+    reference = torch.tensor(to_model_input(np.array(EMPTY_RGB, np.uint8)),
+                             dtype=torch.float32)
+    black = torch.full((1, 9, 9, 3), -1.0)
+    empty = torch.tensor(
+        to_model_input(np.tile(np.array(EMPTY_RGB, np.uint8), (1, 9, 9, 1))),
+        dtype=torch.float32)
+
+    assert bool(looks_dead(black, reference)[0])
+    assert not bool(looks_dead(empty, reference)[0])
+
+
+def test_dead_agents_leave_the_token_stream():
+    from marlenv.wm.marunner import CachedMultiRunner
+
+    model = multi_model()
+    origins = torch.tensor([[[0, 0], [4, 3], [-3, 5]]])
+    runner = CachedMultiRunner(model, origins, window=8, device='cpu')
+    runner.reset(torch.randn(1, 1, 3, 9, 9, 3))
+
+    runner.step(denoise_steps=1, action_steps=1)
+    full_step = runner.cache.step_sizes[-1]
+    assert full_step == 3 * model.tokens_per_frame
+
+    runner.live[1] = False
+    before = runner.displacement[1].clone()
+    runner.step(denoise_steps=1, action_steps=1)
+
+    # the newest group is still open: its frame is committed, its actions
+    # are not taken until the next step
+    assert runner.cache.step_sizes[-1] < full_step, 'dead agent still emits'
+    assert runner.cache.step_sizes[-1] == 2 * model.tokens_per_frame
+    assert torch.equal(runner.displacement[1], before), 'dead agent moved'
+    assert runner.living == [0, 2]
+
+
+def test_cache_trims_variable_sized_steps():
+    """Step sizes shrink as agents die, so trimming cannot assume a size."""
+    from marlenv.wm.cache import KVCache
+
+    cache = KVCache(layers=1, tokens_per_step=30)
+    cache.recording = True
+    for tokens in (30, 30, 20, 20):
+        cache.extend(0, torch.zeros(1, 2, tokens, 8),
+                     torch.zeros(1, 2, tokens, 8))
+        cache.open_step(tokens)
+        cache.close_step(0)
+
+    assert len(cache) == 100
+    cache.trim(2)
+    assert len(cache) == 40           # the two 30s went, not 2 * 30 blindly
+    assert cache.step_sizes == [20, 20]

@@ -92,7 +92,8 @@ class CachedRunner:
                                     self.heading)
         with recording(self.cache):
             self.model.forward_cached(frame, clean, coords, self.cache)
-        self.cache.frames += 1
+        self.cache.open_step(self.model.tokens_per_frame)
+        self.cache.close_step(1)
 
     def _commit_action(self, action):
         coords = self._action_coords(self.time, self.displacement)

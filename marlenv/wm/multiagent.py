@@ -207,20 +207,27 @@ class MultiAgentWorldModel(WorldModel):
         return build_mask(time, is_action, window)
 
     # ------------------------------------------------------- cached stepping
-    def step_frame_coords(self, displacement, time, device):
-        """Coordinates for every agent's patches at one step."""
+    def step_frame_coords(self, displacement, time, device, agents=None):
+        """Coordinates for the given agents' patches at one step.
+
+        ``agents`` defaults to all of them; a rollout passes only the ones
+        still alive, so the dead contribute no tokens rather than tokens the
+        model has to learn to ignore.
+        """
         offsets = self.patch_offsets(device)
         pieces = []
-        for agent in range(self.num_agents):
+        for agent in (range(self.num_agents) if agents is None else agents):
             spatial = offsets + displacement[agent]
             stamp = torch.full((spatial.shape[0], 1), time, device=device)
             pieces.append(torch.cat([stamp, spatial], dim=-1))
         return torch.cat(pieces).long()[None]
 
-    def step_action_coords(self, displacement, time, device):
-        """Coordinates for every agent's action at one step."""
-        stamp = torch.full((self.num_agents, 1), time, device=device)
-        return torch.cat([stamp, displacement], dim=-1).long()[None]
+    def step_action_coords(self, displacement, time, device, agents=None):
+        """Coordinates for the given agents' actions at one step."""
+        chosen = (list(range(self.num_agents)) if agents is None
+                  else list(agents))
+        stamp = torch.full((len(chosen), 1), time, device=device)
+        return torch.cat([stamp, displacement[chosen]], dim=-1).long()[None]
 
     def frames_cached(self, frames, tau, coords, cache):
         """Noise on one step's frames, against a cache.
