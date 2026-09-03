@@ -66,3 +66,37 @@ python examples/grade_rollout.py --out marlenv/demodata
 
 Writes `.npz` rollouts and scores stand-in predictors, so the grading path
 can be checked before a world model exists.
+
+## Checkpoints kept in the repository
+
+The collected datasets stay out of git, since a seed and the collection
+script regenerate them. A few trained models are worth keeping, because
+they are what the measurements in the history refer to and they take hours
+to reproduce.
+
+| file | what it is |
+| --- | --- |
+| `az_policy.pt` | AlphaZero network. Drives data collection, and the searched prefix a world model rollout is bootstrapped with. |
+| `wm_ctx48/model.pt` | Single agent world model, context 48. The baseline every multi-agent number is compared against. |
+| `wam_deep/model_step8000.pt` | Multi agent world *action* model, 12 blocks. Diffuses actions alongside frames, so it can be rolled out with several agents. |
+
+Scored on next-frame prediction from clean history, split by cell type,
+which is the comparison that matters -- an aggregate over all pixels is
+dominated by background and hides the part that is hard:
+
+| | single, 6 blocks | multi, 12 blocks |
+| --- | --- | --- |
+| centre cell (the viewer's own head) | 1.000 | 0.984 |
+| snake cells | 0.815 | 0.810 |
+| empty / wall / fruit | 0.981 | 0.995 |
+| overall | 0.960 | 0.970 |
+
+```bash
+python examples/grade_frames.py \
+    --models marlenv/demodata/wm_ctx48/model.pt \
+             marlenv/demodata/wam_deep/model_step8000.pt \
+    --names single multi
+python examples/rollout_wam.py \
+    --model marlenv/demodata/wam_deep/model_step8000.pt \
+    --checkpoint marlenv/demodata/az_policy.pt
+```
