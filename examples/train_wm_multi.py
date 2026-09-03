@@ -26,7 +26,11 @@ def parse_args():
     p.add_argument('--components', nargs='+', default=['expert', 'explore'])
     p.add_argument('--episodes-per-component', type=int, default=None)
     p.add_argument('--val-fraction', type=float, default=0.05)
-    p.add_argument('--context', type=int, default=24)
+    p.add_argument('--context', type=int, default=None,
+                   help='frames per training window; with --init this '
+                        'defaults to whatever the checkpoint was trained '
+                        'with, since changing it silently would change the '
+                        'model that gets written out')
     p.add_argument('--steps', type=int, default=12000)
     p.add_argument('--batch-size', type=int, default=16)
     p.add_argument('--lr', type=float, default=3e-4)
@@ -119,6 +123,14 @@ def main():
     torch.manual_seed(args.seed)
     device = args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
 
+    # read before anything is built from it: a warm start inherits the
+    # window it was trained with unless told otherwise, since a different
+    # one would quietly write out a model that is not what it says it is
+    saved = (torch.load(args.init, map_location='cpu', weights_only=False)
+             if args.init else None)
+    if args.context is None:
+        args.context = saved.get('context', 24) if saved else 24
+
     weights = spread(args.action_weight, len(args.components),
                      '--action-weight')
     dropouts = spread(args.action_dropout, len(args.components),
@@ -151,10 +163,8 @@ def main():
         num_agents=agents, view=sequences['observations'].shape[3],
         num_actions=4, frame='world', dim=args.dim, depth=args.depth,
         heads=args.heads).to(device)
-    if args.init:
+    if saved is not None:
         from marlenv.wm.graft import graft_depth
-        saved = torch.load(args.init, map_location='cpu',
-                           weights_only=False)
         silenced = graft_depth(model, saved['model'])
         note = (f' as {saved.get("depth", "?")} blocks grown to '
                 f'{args.depth}, {silenced} silenced duplicates'

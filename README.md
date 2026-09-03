@@ -22,13 +22,118 @@ search policies, the world models, and the data pipeline -- because they
 are the project rather than optional extras. `pip install -e '.[dev]'`
 adds pytest if you want to run the suite.
 
-The torch wheel pip resolves is the default one for your platform. On a
-machine with a GPU you may want a build matched to your CUDA version
-instead; install that first, from https://pytorch.org, and the line above
-will leave it alone.
+On Linux the torch wheel on PyPI is already the CUDA build -- it pulls
+`cuda-toolkit`, `cudnn` and `nccl` with it -- so the GPU works out of the
+box and no extra index is needed. You only need
+https://pytorch.org for a *different* CUDA version, or for the CPU-only
+build, which is the smaller download; install either first and the line
+above will leave it alone.
 
 Developed against Python 3.14 and torch 2.11; 3.12 is the safer default if
 you have no reason to prefer another.
+
+## Running the world action model
+
+A trained multi-agent world action model is in the repository, so this
+works from a fresh clone with nothing else collected or trained:
+
+```bash
+# watch it play itself, and write a gif
+python examples/rollout_wam.py \
+    --model marlenv/demodata/wam_deep/model_step8000.pt \
+    --checkpoint marlenv/demodata/az_policy.pt \
+    --out showcase/selfplay.gif
+
+# play it yourself: arrows or WASD steer, the others are the model's
+python examples/play_wam.py \
+    --model marlenv/demodata/wam_deep/model_step8000.pt \
+    --checkpoint marlenv/demodata/az_policy.pt
+```
+
+Both bootstrap with real steps from the simulator before handing over, so
+the model starts from something in distribution; `--checkpoint` is the
+search that plays that prefix, and dropping it falls back to random
+rollouts. `--bootstrap 1` hands over immediately. `play_wam.py` needs a
+display -- add `--headless` to run it without one.
+
+The model was trained with three snakes. It generalises to more, because
+agents are told apart by where they are rather than by an identity
+embedding, but the palette assigns a colour per snake and it has only ever
+seen three of them. Cycle the colours instead of introducing new ones:
+
+```bash
+python examples/rollout_wam.py \
+    --model marlenv/demodata/wam_deep/model_step8000.pt \
+    --num-agents 6 --snake-colors 3
+```
+
+## Training
+
+The datasets are not in the repository -- a seed and the collection script
+regenerate them, and they are larger than the models. Collect first:
+
+```bash
+python examples/collect_dataset.py --preset expert  --episodes 1200 \
+    --workers 20 --checkpoint marlenv/demodata/az_policy.pt
+python examples/collect_dataset.py --preset explore --episodes 1500 \
+    --workers 20 --checkpoint marlenv/demodata/az_policy.pt
+```
+
+Then train. Frames come from every component; actions only from the expert
+one, because an exploration episode's actions are partly noise and the
+policy head cannot fit noise:
+
+```bash
+python examples/train_wm_multi.py --context 48 --steps 36000 \
+    --depth 12 --action-weight 0.075 0.0 --action-dropout 0.5 1.0 \
+    --out marlenv/demodata/wam_new
+```
+
+`--action-weight` is per component and matters more than it looks: at 1.0
+the action term takes eight times the frame term's gradient by the end of a
+run, and it stops being able to spend it once the policy reaches its
+entropy floor. The `pull a/f` figure in the log is that ratio, measured
+rather than assumed.
+
+### Growing a trained model deeper
+
+Depth is what closed the gap to the single agent model, and it does not
+need a retrain. `--init` with a deeper `--depth` grafts: each trained block
+is followed by a silenced copy of itself, so step zero computes exactly
+what the shallower model did and carries on from there. The target depth
+must be a whole multiple of the checkpoint's.
+
+```bash
+# 12 blocks -> 24, carrying on from the trained model
+python examples/train_wm_multi.py --init \
+    marlenv/demodata/wam_deep/model_step8000.pt \
+    --depth 24 --steps 8000 --lr 1e-4 \
+    --action-weight 0.025 0.0 --action-dropout 0.5 1.0 \
+    --out marlenv/demodata/wam_24
+```
+
+The context window is inherited from the checkpoint, so it does not have to
+be repeated. Expect the loss to sit *above* where the shallower model
+finished for the first couple of thousand steps: the duplicates start inert
+and their inner weights only begin learning as their gates open. Going 12
+to 24 doubles the parameters to 19.2M and roughly doubles the step time.
+
+`--save-at-start` writes the graft before training touches it, which is how
+to check that it really does reproduce what it grew from.
+
+### Measuring it
+
+```bash
+python examples/grade_frames.py \
+    --models marlenv/demodata/wm_ctx48/model.pt \
+             marlenv/demodata/wam_deep/model_step8000.pt \
+    --names single multi
+```
+
+Scores next-frame prediction split by cell type. Do not read the aggregate
+loss on its own: most of a view is background and wall, which are easy, so
+a model that renders those perfectly and smears every snake still scores
+well.
 
 ## Rules
 
