@@ -34,9 +34,12 @@ def parse_args():
     p.add_argument('--steps', type=int, default=12000)
     p.add_argument('--batch-size', type=int, default=16)
     p.add_argument('--lr', type=float, default=3e-4)
-    p.add_argument('--dim', type=int, default=256)
-    p.add_argument('--depth', type=int, default=6)
-    p.add_argument('--heads', type=int, default=8)
+    p.add_argument('--dim', type=int, default=None)
+    p.add_argument('--depth', type=int, default=None,
+                   help='blocks. With --init this defaults to the '
+                        'checkpoint\'s; pass a whole multiple of it to '
+                        'grow deeper')
+    p.add_argument('--heads', type=int, default=None)
     p.add_argument('--action-weight', type=float, nargs='+', default=[1.0],
                    help='how hard the action term pulls on the shared '
                         'trunk; at 1.0 four action components weigh as '
@@ -128,8 +131,15 @@ def main():
     # one would quietly write out a model that is not what it says it is
     saved = (torch.load(args.init, map_location='cpu', weights_only=False)
              if args.init else None)
-    if args.context is None:
-        args.context = saved.get('context', 24) if saved else 24
+    # a warm start inherits the shape it was trained with unless told
+    # otherwise: taking these from argparse defaults instead would either
+    # fail on the state dict or, for the context, quietly write out a model
+    # that is not what it says it is
+    fallback = {'context': 24, 'dim': 256, 'depth': 6, 'heads': 8}
+    for name, default in fallback.items():
+        if getattr(args, name) is None:
+            setattr(args, name, saved.get(name, default) if saved
+                    else default)
 
     weights = spread(args.action_weight, len(args.components),
                      '--action-weight')
