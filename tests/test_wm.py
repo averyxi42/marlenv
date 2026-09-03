@@ -291,3 +291,76 @@ def test_velocity_round_trips_at_every_noise_level():
 
         assert torch.allclose(recovered, clean, atol=1e-5)
         assert torch.allclose(recovered_noise, noise, atol=1e-5)
+
+
+# ------------------------------------------------------- frames of reference
+def test_world_frame_uses_cardinal_actions_directly():
+    from marlenv.wm.interactive import HEADINGS
+
+    model = tiny_model()
+    player = WorldModelPlayer(model, np.zeros((9, 9, 3), np.uint8),
+                              Direction.UP, context=6, denoise_steps=1,
+                              frame='world',
+                              pose=make_pose(6, 6, Direction.UP))
+
+    action, heading = player.resolve(Direction.LEFT)
+
+    assert heading is Direction.LEFT
+    assert action == HEADINGS.index(Direction.LEFT)
+
+
+def test_ego_frame_uses_relative_actions():
+    model = tiny_model()
+    player = WorldModelPlayer(model, np.zeros((9, 9, 3), np.uint8),
+                              Direction.UP, context=6, denoise_steps=1,
+                              frame='ego')
+
+    action, heading = player.resolve(Direction.LEFT)
+
+    assert heading is Direction.LEFT
+    assert action == 1                      # a left turn, relatively
+
+
+def test_reversal_is_refused_in_both_frames():
+    model = tiny_model()
+    for frame in ('ego', 'world'):
+        player = WorldModelPlayer(model, np.zeros((9, 9, 3), np.uint8),
+                                  Direction.UP, context=6, denoise_steps=1,
+                                  frame=frame)
+        _, heading = player.resolve(Direction.DOWN)
+
+        assert heading is Direction.UP, f'{frame} accepted a reversal'
+
+
+def test_world_frame_display_is_not_rotated_again():
+    """A world-frame model already predicts north-up."""
+    model = tiny_model()
+    pixels = np.random.randint(0, 255, (9, 9, 3), dtype=np.uint8)
+
+    ego = WorldModelPlayer(model, pixels, Direction.RIGHT, context=4,
+                           denoise_steps=1, frame='ego')
+    world = WorldModelPlayer(model, pixels, Direction.RIGHT, context=4,
+                             denoise_steps=1, frame='world')
+
+    # the ego player undoes the head-frame rotation, the world one does not
+    assert not np.array_equal(ego.latest_frame(), world.latest_frame())
+    assert np.array_equal(world.latest_frame(),
+                          to_pixels(to_model_input(pixels)))
+
+
+def test_world_sequences_use_four_actions():
+    episode = {
+        'alive_mask': np.ones((3, 1), dtype=bool),
+        'observations': np.full((3, 1, 9, 9, 3), 200, dtype=np.uint8),
+        'ego_actions': np.zeros((3, 1, 3), dtype=np.uint8),
+        'cardinal_actions': np.zeros((3, 1, 4), dtype=np.uint8),
+        'poses': np.zeros((3, 1, 3), dtype=np.int16),
+    }
+    episode['ego_actions'][..., 0] = 1
+    episode['cardinal_actions'][..., 3] = 1
+
+    (_, ego_actions, _), = list(agent_sequences(episode, frame='ego'))
+    (_, world_actions, _), = list(agent_sequences(episode, frame='world'))
+
+    assert set(ego_actions.tolist()) == {0}
+    assert set(world_actions.tolist()) == {3}

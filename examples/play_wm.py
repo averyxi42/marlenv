@@ -35,8 +35,9 @@ from marlenv.core.palette import snap_to_palette
 from marlenv.core.snake import Direction
 from marlenv.grading.compare import PALETTE_SNAKES
 from marlenv.wm.canvas import CanvasIntegrator, make_pose
-from marlenv.wm.interactive import (SimulatorReference, WorldModelPlayer,
-                                    world_up)
+from marlenv.wm.interactive import (HEADINGS, cardinal_to_ego,
+                                    SimulatorReference,
+                                    WorldModelPlayer, world_up)
 from marlenv.wm.model import WorldModel
 
 REWARD_DICT = {'fruit': 1.0, 'kill': 0.0, 'lose': -5.0, 'win': 0.0,
@@ -77,11 +78,15 @@ def parse_args():
 
 
 def load_model(path, device):
+    """Rebuild a checkpoint, reading its frame of reference from it."""
     state = torch.load(path, map_location='cpu', weights_only=False)
+    frame = state.get('frame', 'ego')
     model = WorldModel(view=state.get('view', 9), dim=state['dim'],
-                       depth=state['depth'], heads=state['heads'])
+                       depth=state['depth'], heads=state['heads'],
+                       num_actions=state.get('num_actions',
+                                             3 if frame == 'ego' else 4))
     model.load_state_dict(state['model'])
-    return model.to(device).eval(), state.get('context', 24)
+    return model.to(device).eval(), state.get('context', 24), frame
 
 
 def make_env(args):
@@ -97,27 +102,35 @@ def make_env(args):
 class Session:
     """One playthrough: env, model player, canvas and optional reference."""
 
-    def __init__(self, args, model, context, device, seed):
+    def __init__(self, args, model, context, device, seed, frame='ego'):
         self.args = args
+        self.frame = frame
         self.env = make_env(args)
         self.env.reset(seed=seed)
         base = self.env.unwrapped
         snake = base.snakes[0]
 
         self.player = WorldModelPlayer(
-            model, base.egocentric_rgb()[0], snake.direction,
+            model, self.observe(), snake.direction,
             context=context, denoise_steps=args.denoise_steps,
-            device=device, seed=seed,
+            device=device, seed=seed, frame=frame,
             pose=make_pose(snake.head_coord[0], snake.head_coord[1],
                            snake.direction))
         self.canvas = CanvasIntegrator(args.side, args.side,
                                        args.view_radius, decay=args.decay)
-        self.canvas.add(world_up(base.egocentric_rgb()[0], snake.direction),
-                        self.player.pose)
+        self.canvas.add(self.player.latest_frame(), self.player.pose)
 
         self.reference = SimulatorReference(self.env) if args.compare else None
         self.bootstrap(args.bootstrap)
         self.alive = True
+
+    def observe(self):
+        """Agent 0's view, in whatever frame this session's model expects."""
+        base = self.env.unwrapped
+        view = base.egocentric_rgb()[0]
+        if self.frame == 'world':
+            return world_up(view, base.snakes[0].direction)
+        return view
 
     def bootstrap(self, frames):
         """Feed real transitions in before handing over to the model."""
@@ -126,20 +139,28 @@ class Session:
             snake = base.snakes[0]
             if not snake.alive:
                 break
-            actions = [0] * base.num_snakes
-            self.env.step(actions)
+            # keep going straight, which is action 0 in the relative frame
+            # and the current heading's index in the cardinal one
+            self.env.step([0] * base.num_snakes)
             snake = base.snakes[0]
-            self.player.bootstrap([base.egocentric_rgb()[0]],
-                                  [snake.direction], [0])
-            self.canvas.add(world_up(base.egocentric_rgb()[0],
-                                     snake.direction), self.player.pose)
+            action = (0 if self.frame == 'ego'
+                      else HEADINGS.index(snake.direction))
+            self.player.bootstrap([self.observe()], [snake.direction],
+                                  [action])
+            self.canvas.add(self.player.latest_frame(), self.player.pose)
 
     def step(self, cardinal):
-        ego = self.player.step(cardinal)
+        """Advance the dream, and the reference simulator alongside it."""
+        before = self.player.heading
+        action = self.player.step(cardinal)
         self.canvas.add(self.player.latest_frame(), self.player.pose)
         if self.reference is not None:
-            self.alive = self.reference.step(ego)
-        return ego
+            # the simulator always takes relative actions, whatever frame
+            # the model was trained in
+            relative = (action if self.frame == 'ego'
+                        else cardinal_to_ego(before, HEADINGS[action]) or 0)
+            self.alive = self.reference.step(relative)
+        return action
 
 
 def compose(session, args, snapped):
@@ -200,10 +221,11 @@ def save_gif(frames, path, duration=140):
 def main():
     args = parse_args()
     device = args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
-    model, context = load_model(args.model, device)
+    model, context, frame = load_model(args.model, device)
+    print(f'model frame: {frame}')
 
     if args.demo:
-        session = Session(args, model, context, device, args.seed)
+        session = Session(args, model, context, device, args.seed, frame)
         frames = run_demo(session, args, args.demo)
         if args.record:
             save_gif(frames, args.record)
@@ -214,7 +236,7 @@ def main():
     pygame.display.set_caption('marlenv world model')
     font = pygame.font.SysFont('monospace', 15)
 
-    session = Session(args, model, context, device, args.seed)
+    session = Session(args, model, context, device, args.seed, frame)
     sheet, names = compose(session, args, snapped=True)
     screen = pygame.display.set_mode((sheet.shape[1], sheet.shape[0] + 54))
     clock = pygame.time.Clock()
@@ -248,7 +270,7 @@ def main():
                     save_gif(frames, args.record or 'showcase/dream.gif')
                 elif event.key == pygame.K_r:
                     session = Session(args, model, context, device,
-                                      np.random.randint(1 << 30))
+                                      np.random.randint(1 << 30), frame)
                     frames = []
                 elif event.key in (pygame.K_LEFTBRACKET,
                                    pygame.K_RIGHTBRACKET):

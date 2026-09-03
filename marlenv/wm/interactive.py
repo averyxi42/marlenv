@@ -10,17 +10,24 @@ which keeps the board still while the snake turns, and cardinal key presses
 are converted to relative actions against the current heading. Reversing
 into your own neck is not a legal move, so that key is ignored the way a
 snake game normally does.
+
+A world-frame model needs less of this: it already predicts north-up views
+and takes the four cardinal actions, so only the reversal rule applies. Both
+kinds are played through the same class, which keeps the two comparable --
+what you see on screen is north-up either way.
 """
 import numpy as np
 import torch
 
 from marlenv.core.snake import Direction
 from marlenv.grading.compare import unrotate_view
-from marlenv.grading.poses import LEFT_TURN, RIGHT_TURN, step_pose, turn
+from marlenv.grading.poses import LEFT_TURN, Pose, RIGHT_TURN, turn
 from marlenv.wm.data import to_model_input, to_pixels
 from marlenv.wm.diffusion import denoise_next
 
 STRAIGHT, LEFT, RIGHT = 0, 1, 2
+HEADINGS = list(Direction)
+OPPOSITE = {heading: LEFT_TURN[LEFT_TURN[heading]] for heading in Direction}
 
 
 def cardinal_to_ego(heading, cardinal):
@@ -52,7 +59,11 @@ class WorldModelPlayer:
     """
 
     def __init__(self, model, observation, heading, context=24,
-                 denoise_steps=8, device='cpu', seed=0, pose=None):
+                 denoise_steps=8, device='cpu', seed=0, pose=None,
+                 frame='ego'):
+        if frame not in ('ego', 'world'):
+            raise ValueError("frame must be 'ego' or 'world'")
+        self.frame = frame
         self.model = model.to(device).eval()
         self.device = device
         self.context = context
@@ -74,27 +85,46 @@ class WorldModelPlayer:
         return self.headings[-1]
 
     def latest_frame(self):
-        """The most recent frame as world-up uint8 pixels."""
+        """The most recent frame as north-up uint8 pixels.
+
+        A world-frame model already predicts north-up, so only the ego frame
+        needs undoing. Either way the caller gets the same thing.
+        """
         pixels = to_pixels(self.history[0, -1].cpu().numpy())
+        if self.frame == 'world':
+            return pixels
         return world_up(pixels, self.heading)
 
-    def step(self, cardinal):
-        """Advance one frame. Returns the action actually taken."""
-        ego = cardinal_to_ego(self.heading, cardinal) if cardinal else None
-        if ego is None:
-            ego = STRAIGHT           # ignore reversals, keep going
+    def resolve(self, cardinal):
+        """The action index and resulting heading for a key press.
 
-        actions = torch.tensor([self.actions + [ego]], dtype=torch.long,
+        Reversals are refused in both frames -- a snake cannot turn back into
+        its own neck -- and an absent or refused press keeps it going.
+        """
+        heading = self.heading
+        if cardinal is None or cardinal is OPPOSITE[heading]:
+            cardinal = heading
+        if self.frame == 'world':
+            return HEADINGS.index(cardinal), cardinal
+        action = cardinal_to_ego(heading, cardinal)
+        return action, turn(heading, action)
+
+    def step(self, cardinal):
+        """Advance one frame. Returns the action index actually taken."""
+        action, heading = self.resolve(cardinal)
+
+        actions = torch.tensor([self.actions + [action]], dtype=torch.long,
                                device=self.device)
         frame = denoise_next(self.model, self.history, actions,
                              denoise_steps=self.denoise_steps,
                              generator=self.generator)
 
         self.history = torch.cat([self.history, frame], dim=1)
-        self.actions.append(ego)
-        self.headings.append(turn(self.heading, ego))
+        self.actions.append(action)
+        self.headings.append(heading)
         if self.pose is not None:
-            self.pose = step_pose(self.pose, ego)
+            self.pose = Pose(self.pose.row + heading.value[0],
+                             self.pose.col + heading.value[1], heading)
             self.poses.append(self.pose)
         self.steps += 1
 
@@ -102,19 +132,26 @@ class WorldModelPlayer:
             drop = self.history.shape[1] - self.context
             self.history = self.history[:, drop:]
             self.actions = self.actions[drop:]
-        return ego
+        return action
 
-    def bootstrap(self, observations, headings, actions):
-        """Seed the history with real frames before handing over."""
-        for observation, heading, action in zip(observations, headings,
-                                                actions):
+    def bootstrap(self, observations, headings, actions, poses=None):
+        """Seed the history with real frames before handing over.
+
+        Observations must already be in this player's frame, and actions in
+        its encoding -- relative for ego, cardinal index for world.
+        """
+        poses = poses or [None] * len(observations)
+        for observation, heading, action, pose in zip(observations, headings,
+                                                      actions, poses):
             frame = to_model_input(np.asarray(observation)[None, None])
             self.history = torch.cat(
                 [self.history, torch.from_numpy(frame).to(self.device)], 1)
             self.actions.append(int(action))
             self.headings.append(heading)
             if self.pose is not None:
-                self.pose = step_pose(self.pose, int(action))
+                self.pose = pose or Pose(self.pose.row + heading.value[0],
+                                         self.pose.col + heading.value[1],
+                                         heading)
                 self.poses.append(self.pose)
         if self.history.shape[1] > self.context:
             drop = self.history.shape[1] - self.context
