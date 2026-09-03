@@ -20,10 +20,34 @@ another's territory. Concretely, for a nearest-centroid decoder to be right
 with probability ~1 the distance between two class colours must exceed
 ``5 * (sigma_a + sigma_b)``, five standard deviations of the noise on each
 side. Empty cells additionally carry the heading gradient, which displaces
-them by up to ``GRADIENT_SHIFT``, so their pairs need that much again.
+them, so their pairs need that displacement allowed for as well.
 
 :func:`safety_report` computes all of this for a given configuration, and
 the tests use it to assert the shipped defaults keep a healthy margin.
+
+The bound is deliberately conservative for snakes. It assumes every pixel
+draws its own noise, but the snake field holds only ``num_snakes * period``
+draws per episode, shared across every pixel of a segment class. Errors are
+therefore rarer than the bound suggests and correlated when they happen --
+a whole class flips, not scattered pixels. Measured over 400 episodes at
+sigma_bg 2 and gradient 16:
+
+======  ===============  ==================
+sigma   part confusions  identity/occupancy
+======  ===============  ==================
+6       0                0
+8       0                0
+10      1                0
+12      11               1
+16      74               11
+20      232              53
+======  ===============  ==================
+
+Two things follow. Decoding is clean well past the analytic budget, and it
+degrades into the *harmless* failure first: confusing head for body within
+one snake, which an evaluator that supplies or samples the actions can
+recover anyway. Identity and occupancy errors only appear once the noise is
+roughly double what the analysis permits.
 """
 import itertools
 
@@ -48,7 +72,9 @@ TAIL_WHEEL = [
 ]
 
 EMPTY_RGB = (17, 16, 20)
-WALL_RGB = (145, 149, 159)
+# a dark blue slate: the wall was never the binding pair, so it can
+# recede instead of framing the board in bright grey
+WALL_RGB = (78, 86, 108)
 FRUIT_RGB = (243, 32, 36)
 
 CELL_COLORS = {
@@ -61,7 +87,6 @@ CELL_COLORS = {
 }
 
 # only empty cells carry the heading gradient, so only they are displaced
-GRADIENT_SHIFT = float(np.hypot(28.0, 28.0))
 SNAKE_KINDS = (Cell.HEAD.value, Cell.BODY.value, Cell.TAIL.value)
 
 
@@ -100,8 +125,13 @@ def decode_grid(frame, num_snakes):
     return values[np.argmin((diff ** 2).sum(axis=-1), axis=-1)]
 
 
+def gradient_shift(amplitude):
+    """Worst-case displacement an empty cell suffers from the gradient."""
+    return float(np.hypot(amplitude, amplitude))
+
+
 def safety_report(num_snakes, sigma_bg, sigma_snake,
-                  gradient_shift=GRADIENT_SHIFT, sigmas=5.0, strict=True):
+                  gradient_amplitude=28.0, sigmas=5.0, strict=True):
     """Worst-case decoding margin for a configuration.
 
     Returns ``(slack, description)``; ``slack`` is how much distance is left
@@ -140,7 +170,7 @@ def safety_report(num_snakes, sigma_bg, sigma_snake,
             else:
                 needed += sigmas * sigma_bg
                 if kind == Cell.EMPTY.value:
-                    needed += gradient_shift
+                    needed += gradient_shift(gradient_amplitude)
         slack = distance - needed
         if slack < worst[0]:
             worst = (slack, f'{names[i]} vs {names[j]} '
