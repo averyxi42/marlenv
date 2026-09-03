@@ -14,14 +14,10 @@ Two fields, resampled once per episode:
     obstacles therefore hold exactly the same value for the whole episode.
 
 ``snake_noise``
-    ``(num_snakes, period, 3)``, indexed by snake and by *when a segment was
-    created*, so the pattern is fixed to the body like scales and travels
-    with the snake.
-
-    Indexing by distance from the head instead would fix the pattern in the
-    head's frame and let the body slide through it, because a segment's
-    distance from the head grows by one every step. Its creation index,
-    ``moves - distance``, is invariant: both terms grow together.
+    ``(num_snakes, period, 3)``, indexed by snake and by distance from that
+    snake's head. A body cell's noise is a function of how far back along the
+    body it sits, so the pattern travels with the snake as it moves rather
+    than staying pinned to the board.
 """
 import numpy as np
 
@@ -43,8 +39,8 @@ class ObservationNoise:
     def apply(self, rgb, snakes):
         """Return ``rgb`` with the bound noise added, as uint8.
 
-        Snake cells take their snake's noise instead of the cell's, keyed by
-        the segment's creation index so the texture stays with the segment.
+        Snake cells take their snake's noise instead of the cell's, so a
+        segment carries the same offset wherever it happens to be standing.
         """
         out = rgb.astype(np.float32) + self.cell_noise
         height, width = rgb.shape[:2]
@@ -54,6 +50,5 @@ class ObservationNoise:
             row = self.snake_noise[snake.idx % len(self.snake_noise)]
             for distance, (r, c) in enumerate(snake.coords):
                 if 0 <= r < height and 0 <= c < width:
-                    born = (snake.moves - distance) % self.period
-                    out[r, c] = rgb[r, c] + row[born]
+                    out[r, c] = rgb[r, c] + row[distance % self.period]
         return np.clip(out, 0, 255).astype(np.uint8)

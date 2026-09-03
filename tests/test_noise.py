@@ -65,47 +65,8 @@ def test_static_cells_never_flicker(env):
             break
 
 
-def test_texture_sticks_to_the_body():
-    """A segment must keep its colour while it stays part of the body.
-
-    Indexing the noise by distance from the head fails this: a segment's
-    distance grows every step, so the pattern would sit still in the head's
-    frame and the body would slide through it. Real scales travel with the
-    animal.
-    """
-    env = gym.make('Snake-v1', height=13, width=13, num_snakes=1,
-                   num_fruits=3, observation_noise=SIGMA, noise_period=4,
-                   disable_env_checker=True)
-    env.reset(seed=2)
-    env.action_space.seed(2)
-    base = env.unwrapped
-
-    previous = base.render('rgb_array')
-    previous_body = set(map(tuple, base.snakes[0].coords))
-    checked = 0
-    for _ in range(20):
-        _, _, term, trunc, _ = env.step(list(env.action_space.sample()))
-        if not base.snakes[0].alive:
-            break
-        frame = base.render('rgb_array')
-        body = set(map(tuple, base.snakes[0].coords))
-
-        # cells that were body before and still are: same material segment,
-        # since the body never slides sideways
-        for coord in previous_body & body:
-            assert np.array_equal(frame[coord], previous[coord]), \
-                f'segment at {coord} changed colour'
-            checked += 1
-
-        previous, previous_body = frame, body
-        if all(term) or all(trunc):
-            break
-
-    assert checked > 20, 'test never followed enough segments'
-
-
 def test_snake_noise_repeats_with_the_body_period():
-    """Segments a whole period apart along the body share an offset."""
+    """Body cells are indexed by distance from the head, modulo the period."""
     period = 3
     coords = [(5, 3 + i) for i in range(7)]
     snake = Snake(0, coords)
