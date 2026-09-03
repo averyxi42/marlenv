@@ -240,12 +240,23 @@ def draw(grid, coords: List[tuple], value: int):
     return True
 
 
-def rgb_from_grid(grid, enum, color_dict):
+def rgb_from_grid(grid, enum, color_dict, color_ids=None):
+    """Render a grid to pixels.
+
+    ``color_ids`` caps how many distinct snake colours are used, wrapping
+    the rest around. Two snakes then share a colour, which is not the
+    ambiguity it sounds like where identity is carried by position rather
+    than by hue -- and it keeps the picture inside the set of colours a
+    model was trained on when there are more snakes on the board than it
+    ever saw.
+    """
     rgb_array = np.zeros((*grid.shape, 3), dtype=np.uint8)
     for r in range(grid.shape[0]):
         for c in range(grid.shape[1]):
             cell_value = grid[r, c] % 10
             cell_id = grid[r, c] // 10
+            if color_ids:
+                cell_id = cell_id % color_ids
             color_list = color_dict[enum(cell_value).value]
             cell_color = np.array(color_list[cell_id % len(color_list)])
             cycle = cell_id // len(color_list)

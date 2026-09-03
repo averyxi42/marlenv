@@ -60,6 +60,12 @@ def parse_args():
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--side', type=int, default=15)
     p.add_argument('--num-agents', type=int, default=None)
+    p.add_argument('--snake-colors', type=int, default=None,
+                   help='distinct snake colours to use, wrapped around. A '
+                        'model only ever saw as many colours as it had '
+                        'snakes in training, so a fourth snake in a fresh '
+                        'hue is out of distribution; cycling keeps the '
+                        'board inside what it knows')
     p.add_argument('--num-fruits', type=int, default=4)
     p.add_argument('--view-radius', type=int, default=4)
     p.add_argument('--obstacle-density', type=float, default=0.12)
@@ -112,6 +118,7 @@ def main():
                    observation_noise=2.0, snake_noise_sigma=8.0,
                    background_gradient=16.0,
                    obstacle_density=args.obstacle_density,
+                   snake_colors=args.snake_colors,
                    disable_env_checker=True)
     env.reset(seed=args.seed)
     base = env.unwrapped

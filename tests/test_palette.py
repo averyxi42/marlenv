@@ -93,3 +93,37 @@ def test_gradient_stays_off_walls_and_fruit():
     # while empty cells do vary, that being the point of the gradient
     empty = base.grid == Cell.EMPTY.value
     assert len(np.unique(frame[empty], axis=0)) > 1
+
+
+def test_snake_colors_wraps_hues_for_a_crowded_board():
+    """A model only knows the hues it trained with.
+
+    Snake colour is assigned by index, so a fourth snake on a board trained
+    with three arrives in a hue the model has never seen -- and it renders
+    those cells wrong every single time. Capping the number of colours wraps
+    the extra snakes back onto known hues, which costs nothing where
+    identity is carried by position rather than by colour.
+    """
+    import gymnasium as gym
+    import marlenv  # noqa: F401
+    from marlenv.core.palette import decode_grid
+    from marlenv.grading.compare import PALETTE_SNAKES
+
+    def centres(colors):
+        env = gym.make('Snake-v1', height=15, width=15, num_snakes=5,
+                       num_fruits=4, view_radius=4, observation_noise=0.0,
+                       snake_noise_sigma=0.0, background_gradient=0.0,
+                       snake_colors=colors, disable_env_checker=True)
+        env.reset(seed=0)
+        base = env.unwrapped
+        middle = base.view_radius
+        return [int(decode_grid(view, PALETTE_SNAKES)[middle, middle])
+                for view in base.egocentric_rgb()]
+
+    own = centres(None)
+    assert [code // 10 for code in own] == [0, 1, 2, 3, 4]
+
+    wrapped = centres(3)
+    assert [code // 10 for code in wrapped] == [0, 1, 2, 0, 1]
+    # every viewpoint is still centred on a head, whichever hue it wears
+    assert all(code % 10 == Cell.HEAD.value for code in wrapped)

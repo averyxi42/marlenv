@@ -97,6 +97,12 @@ class SnakeEnv(gym.Env):
         # (2 * view_radius + 1) square. None disables it. Distinct from
         # vision_range, which crops the learned feature planes.
         self.view_radius = kwargs.pop('view_radius', None)
+        # how many distinct snake colours to use, wrapping the rest around.
+        # None gives every snake its own, which is what the palette is built
+        # for; a smaller number keeps a crowded board inside the colours a
+        # model was trained on, at the cost of snakes sharing a hue -- which
+        # costs nothing where identity is positional rather than coloured
+        self.snake_colors = kwargs.pop('snake_colors', None)
 
         # World-anchored colour field on the background. Egocentric views are
         # rotated into the head frame, so without an absolute cue like this a
@@ -300,7 +306,8 @@ class SnakeEnv(gym.Env):
 
     def _padded_rgb(self, pad):
         """The board rendered with ``pad`` cells of free space around it."""
-        rgb_array = rgb_from_grid(pad_grid(self.grid, pad), Cell, CellColors)
+        rgb_array = rgb_from_grid(pad_grid(self.grid, pad), Cell, CellColors,
+                                  color_ids=self.snake_colors)
         background = None
         if self.background_gradient:
             gradient = heading_gradient(
@@ -500,7 +507,8 @@ class SnakeEnv(gym.Env):
         if self.image_obs:
             self.obs = deque(maxlen=self.frame_stack)
             for _ in range(self.frame_stack):
-                self.obs.append(rgb_from_grid(self.grid, Cell, CellColors))
+                self.obs.append(rgb_from_grid(self.grid, Cell, CellColors,
+                                              color_ids=self.snake_colors))
             obs = [np.concatenate(list(self.obs), axis=-1)
                    for _ in range(self.num_snakes)]
         else:
@@ -515,7 +523,8 @@ class SnakeEnv(gym.Env):
 
     def _get_obs(self):
         if self.image_obs:
-            self.obs.append(rgb_from_grid(self.grid, Cell, CellColors))
+            self.obs.append(rgb_from_grid(self.grid, Cell, CellColors,
+                                          color_ids=self.snake_colors))
             obs = [np.concatenate(list(self.obs), axis=-1)
                    for _ in range(self.num_snakes)]
         else:
