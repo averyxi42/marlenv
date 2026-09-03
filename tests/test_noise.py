@@ -165,9 +165,18 @@ def test_noise_is_off_by_default():
     assert len(np.unique(frame.reshape(-1, 3), axis=0)) <= 6
 
 
-def _snake_cell_colours(base, snake_idx=0):
+def _snake_deviations(base, snake_idx=0):
+    """How far each snake cell sits from its palette colour."""
+    from marlenv.core.palette import cell_color
+
     frame = base.render('rgb_array')
-    return {tuple(frame[coord]) for coord in base.snakes[snake_idx].coords}
+    snake = base.snakes[snake_idx]
+    out = []
+    for coord in snake.coords:
+        kind = base.grid[coord] % 10
+        expected = cell_color(kind, snake.idx)
+        out.append(float(np.abs(frame[coord].astype(float) - expected).max()))
+    return out
 
 
 def _background_colours(base):
@@ -184,7 +193,7 @@ def test_background_and_snake_sigmas_are_independent():
                             disable_env_checker=True)
     quiet_snakes.reset(seed=0)
     base = quiet_snakes.unwrapped
-    assert len(_snake_cell_colours(base)) == 1, 'snake noise leaked in'
+    assert max(_snake_deviations(base)) == 0, 'snake noise leaked in'
     assert len(_background_colours(base)) > 5
 
     quiet_background = gym.make('Snake-v1', height=13, width=13, num_snakes=2,
@@ -194,7 +203,7 @@ def test_background_and_snake_sigmas_are_independent():
     quiet_background.reset(seed=0)
     base = quiet_background.unwrapped
     assert len(_background_colours(base)) == 1, 'background noise leaked in'
-    assert len(_snake_cell_colours(base)) > 1
+    assert max(_snake_deviations(base)) > 0
 
 
 def test_snake_sigma_defaults_to_the_background_sigma():

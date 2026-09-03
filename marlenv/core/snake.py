@@ -11,17 +11,34 @@ class Cell(Enum):
     TAIL = 5
 
 
-_color_wheel = [(104, 255, 0), (255, 191, 0), (255, 0, 92), (0, 111, 255)]
+# the palette lives in marlenv.core.palette, which owns the separation
+# analysis that keeps a rendered frame decodable back to the grid
+def _load_cell_colors():
+    from marlenv.core.palette import CELL_COLORS
+    return CELL_COLORS
 
 
-CellColors = {
-    Cell.EMPTY.value: [(0, 0, 0)],
-    Cell.WALL.value: [(32, 32, 32)],
-    Cell.FRUIT.value: [(223, 7, 22)],
-    Cell.HEAD.value: _color_wheel,
-    Cell.BODY.value: _color_wheel,
-    Cell.TAIL.value: _color_wheel
-}
+class _CellColors(dict):
+    """Lazy palette view, breaking the snake/palette import cycle."""
+
+    def _ensure(self):
+        if not super().__len__():
+            self.update(_load_cell_colors())
+
+    def __getitem__(self, key):
+        self._ensure()
+        return super().__getitem__(key)
+
+    def __len__(self):
+        self._ensure()
+        return super().__len__()
+
+    def __iter__(self):
+        self._ensure()
+        return super().__iter__()
+
+
+CellColors = _CellColors()
 
 
 class Direction(Enum):

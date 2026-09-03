@@ -64,18 +64,18 @@ def parse_args():
                         'gif tiling every agent\'s own view')
     p.add_argument('--tile-scale', type=int, default=12,
                    help='pixels per cell in the tiled observation gif')
-    p.add_argument('--observation-noise', type=float, default=2.0,
+    p.add_argument('--observation-noise', type=float, default=4.0,
                    help='sigma of the bound RGB observation noise '
                         '(classic style; 0 disables)')
     p.add_argument('--gradient-angle', type=float, default=0.0,
                    help='direction of the gradient stripes, in degrees; '
                         '0 runs along the rows')
-    p.add_argument('--background-gradient', type=float, default=28.0,
+    p.add_argument('--background-gradient', type=float, default=16.0,
                    help='amplitude of the world-anchored heading gradient '
                         '(0 disables)')
     p.add_argument('--gradient-period', type=int, default=6,
                    help='period of the heading gradient, in cells')
-    p.add_argument('--snake-noise', type=float, default=16.0,
+    p.add_argument('--snake-noise', type=float, default=6.0,
                    help='sigma of the per-snake noise; defaults to '
                         '--observation-noise')
     p.add_argument('--noise-period', type=int, default=3,

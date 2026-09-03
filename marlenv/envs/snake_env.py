@@ -85,6 +85,8 @@ class SnakeEnv(gym.Env):
         # RGB observation noise, bound to cells and to body position so it
         # is fixed for the episode rather than resampled per frame
         self.observation_noise = kwargs.pop('observation_noise', 0.0)
+        # defaults chosen against marlenv.core.palette.safety_report so a
+        # rendered frame stays decodable; see tests/test_palette.py
         # snake noise sits on saturated colours rather than dark cells, so
         # it takes its own sigma; None follows observation_noise
         self.snake_noise_sigma = kwargs.pop('snake_noise_sigma', None)
@@ -301,10 +303,16 @@ class SnakeEnv(gym.Env):
         rgb_array = rgb_from_grid(pad_grid(self.grid, pad), Cell, CellColors)
         background = None
         if self.background_gradient:
-            background = heading_gradient(
+            gradient = heading_gradient(
                 rgb_array.shape[:2], pad=pad, period=self.gradient_period,
                 amplitude=self.background_gradient,
                 angle=self.gradient_angle)
+            # only empty cells carry it: walls and fruit are objects, and
+            # keeping their colours fixed is what lets a frame be decoded
+            # back to the grid without knowing the gradient's phase
+            background = np.zeros_like(gradient)
+            empty = pad_grid(self.grid, pad) == Cell.EMPTY.value
+            background[empty] = gradient[empty]
         if self.obs_noise is not None:
             field = self.obs_noise.cell_field(rgb_array.shape[:2], pad)
             background = field if background is None else background + field

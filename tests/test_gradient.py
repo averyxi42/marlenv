@@ -111,7 +111,13 @@ def test_gradient_reaches_the_egocentric_view():
 
 
 def test_gradient_never_touches_the_snakes():
-    """A snake must look the same wherever it stands."""
+    """A snake must look the same wherever it stands.
+
+    Checked against the palette rather than by counting colours, since head,
+    body and tail are deliberately different from one another.
+    """
+    from marlenv.core.palette import cell_color
+
     env = gym.make('Snake-v1', height=15, width=15, num_snakes=2,
                    num_fruits=3, observation_noise=0.0, snake_noise_sigma=0.0,
                    background_gradient=30.0, disable_env_checker=True)
@@ -124,8 +130,11 @@ def test_gradient_never_touches_the_snakes():
         for snake in base.snakes:
             if not snake.alive:
                 continue
-            colours = {tuple(frame[coord]) for coord in snake.coords}
-            assert len(colours) == 1, 'gradient bled onto a snake'
+            for coord in snake.coords:
+                kind = base.grid[coord] % 10
+                expected = cell_color(kind, snake.idx).astype(np.uint8)
+                assert np.array_equal(frame[coord], expected), \
+                    'gradient or noise bled onto a snake'
         _, _, term, trunc, _ = env.step(list(env.action_space.sample()))
         if all(term) or all(trunc):
             break
