@@ -682,7 +682,12 @@ def test_multi_agent_actions_stay_causal():
 
 
 def test_dead_agents_stop_moving():
-    """Otherwise their tokens wander onto living agents' cells."""
+    """Otherwise their tokens wander onto living agents' cells.
+
+    Stopping means one last step, not none: an agent alive at step 2 acted
+    there and moved into step 3's cell, which is where the aftermath frame
+    is taken from. It freezes only afterwards.
+    """
     model = multi_model(agents=2)
     actions = torch.zeros(1, 4, 2, dtype=torch.long)
     alive = torch.ones(1, 5, 2, dtype=torch.bool)
@@ -692,8 +697,8 @@ def test_dead_agents_stop_moving():
     displacement, _ = model.trajectory(actions, origins, alive)
     frozen = displacement[0, :, 1]
 
-    assert torch.equal(frozen[3], frozen[2])
-    assert torch.equal(frozen[4], frozen[2])
+    assert not torch.equal(frozen[3], frozen[2]), 'never entered the cell'
+    assert torch.equal(frozen[4], frozen[3]), 'kept walking after dying'
     assert not torch.equal(displacement[0, 4, 0], displacement[0, 2, 0])
 
 
@@ -994,3 +999,106 @@ def test_cache_trims_variable_sized_steps():
     cache.trim(2)
     assert len(cache) == 40           # the two 30s went, not 2 * 30 blindly
     assert cache.step_sizes == [20, 20]
+
+
+def _diverging_episode(frames=8, agents=2, view=9):
+    """Two agents walking apart, the second dying near the end.
+
+    Their offsets at step 0 say nothing about their offsets later, which is
+    the whole point: anything that reads the starting offsets and applies
+    them to a later crop is wrong.
+    """
+    import numpy as np
+    from marlenv.core.snake import Direction
+
+    headings = list(Direction)
+    right, down = headings.index(Direction.RIGHT), headings.index(
+        Direction.DOWN)
+    poses = np.zeros((frames, agents, 3), np.int64)
+    cardinal = np.zeros((frames, agents, 4), np.int64)
+    alive = np.ones((frames, agents), bool)
+    # the frame's own step index is written into its pixels, so a crop can
+    # be located again after the batcher has shuffled it
+    observations = np.zeros((frames, agents, view, view, 3), np.uint8)
+
+    for step in range(frames):
+        observations[step] = step
+        poses[step, 0] = (2, 2 + step, right)          # walking right
+        poses[step, 1] = (2 + step, 9, down)           # walking down
+        cardinal[step, 0, right] = 1
+        cardinal[step, 1, down] = 1
+    alive[frames - 2:, 1] = False                      # agent 1 dies
+    return {'alive_mask': alive, 'poses': poses, 'observations': observations,
+            'cardinal_actions': cardinal, 'steps': frames - 1,
+            'num_agents': agents}
+
+
+def _pack(episode):
+    """One decoded episode packed the way build_multi_sequences packs many."""
+    import numpy as np
+    from marlenv.wm.madata import episode_sequence
+
+    obs, act, live, trained, positions = episode_sequence(episode)
+    return {'observations': obs[None], 'actions': act[None],
+            'alive': live[None], 'trained': trained[None],
+            'mask': np.ones((1, len(obs)), bool), 'positions': positions[None]}
+
+
+def test_crop_origins_follow_the_crop_not_the_episode():
+    """Offsets must be read at the crop's own first frame.
+
+    The agents drift apart, so the episode's starting offsets misplace them
+    by however far they have moved by the time the crop begins.
+    """
+    import numpy as np
+    from marlenv.wm.matrain import MultiBatcher
+
+    sequences = _pack(_diverging_episode())
+    batcher = MultiBatcher(sequences, context=3, seed=0)
+    frames, _, _, _, origins = batcher.batch(12)
+
+    positions = sequences['positions'][0]
+    for row in range(frames.shape[0]):
+        # recover which step this crop started at from the pixels
+        value = frames[row, 0, 0, 0, 0, 0].item()
+        start = int(round((value + 1.0) * 127.5))
+        want = positions[start] - positions[start, 0]
+        assert np.array_equal(origins[row].numpy(), want), (
+            f'crop starting at {start} was given the wrong offsets')
+
+
+def test_a_dying_agent_still_enters_the_cell_it_died_in():
+    """The aftermath frame is the view from the cell, so it must sit there.
+
+    Gating movement on surviving arrival leaves that frame's tokens one cell
+    behind the view they actually carry.
+    """
+    from marlenv.wm.multiagent import MultiAgentWorldModel
+
+    sequences = _pack(_diverging_episode())
+    model = MultiAgentWorldModel(num_agents=2, view=9, num_actions=4,
+                                 frame='world', dim=32, depth=1, heads=4)
+
+    length = int(sequences['mask'][0].sum())
+    positions = sequences['positions'][0, :length]
+    origins = torch.from_numpy(
+        (positions[0] - positions[0, 0])[None])
+    displacement, _ = model.trajectory(
+        torch.from_numpy(sequences['actions'][0, :length - 1][None]), origins,
+        torch.from_numpy(sequences['alive'][0, :length][None]))
+
+    truth = positions - positions[0, 0]
+    trained = sequences['trained'][0, :length]
+    error = (displacement[0].numpy() - truth)[trained]
+    assert not error.any(), 'a trained frame sits away from what it shows'
+
+
+def test_the_action_that_kills_is_still_trained():
+    """It produced the aftermath frame, which is a target, so it must be."""
+    sequences = _pack(_diverging_episode())
+    alive = sequences['alive']
+    fatal = alive[:, :-1] & ~alive[:, 1:]
+    assert fatal.any(), 'the fixture should contain a fatal move'
+    assert (alive[:, :-1] & fatal).all() == fatal.all()
+    # the mask the loss uses must cover it
+    assert alive[:, :-1][fatal].all()

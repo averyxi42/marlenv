@@ -19,7 +19,12 @@ def multi_training_loss(model, frames, actions, alive, trained, origins,
     batch, steps, agents = frames.shape[:3]
     device = frames.device
 
-    action_mask = alive[:, :-1] & alive[:, 1:]
+    # an agent alive at a step took a real action there, whether or not it
+    # survived arriving. Requiring it to be alive afterwards would drop
+    # exactly the fatal moves -- while the aftermath frame they produce is
+    # still a training target, leaving the model to predict the consequence
+    # of an action it was never shown
+    action_mask = alive[:, :-1]
 
     frame_tau = torch.rand(batch, steps, agents, device=device,
                            generator=generator)
@@ -100,8 +105,12 @@ class MultiBatcher:
             take = max(span - 1, 0)
             actions[row, :take] = self.data['actions'][index,
                                                        start:start + take]
-            # origins are re-based on the crop, since only differences matter
-            origins[row] = self.data['origins'][index]
+            # the agents' offsets as of the crop's own first frame, not the
+            # episode's. They move independently, so by step 40 the step-0
+            # offsets place them cells away from where they are -- which is
+            # exactly the registration the shared coordinates depend on
+            here = self.data['positions'][index, start]
+            origins[row] = here - here[0]
 
         to = lambda x: torch.from_numpy(x).to(self.device)
         return (to(to_model_input(frames)), to(actions), to(alive),

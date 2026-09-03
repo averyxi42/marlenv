@@ -73,9 +73,12 @@ class MultiAgentWorldModel(WorldModel):
         A dead agent stops moving. Letting it keep dead-reckoning would walk
         its tokens across the board and eventually onto a living agent's
         cells, which is precisely the confusion the positional identity is
-        supposed to prevent. ``alive`` is ``(b, t, agents)``; a rollout that
-        does not know it can read it off the black frame the model predicts
-        on death.
+        supposed to prevent. ``alive`` is ``(b, t, agents)``.
+
+        What counts is being alive to *act*, not to survive: an agent that
+        dies entering a cell still moved into it, and the aftermath frame is
+        the view from there. Gating on arrival instead would leave that
+        frame's tokens a cell behind what they actually show.
         """
         batch, transitions, agents = actions.shape
         device = actions.device
@@ -98,9 +101,10 @@ class MultiAgentWorldModel(WorldModel):
             nxt = actions[:, step]                 # cardinal index per agent
             step_move = moves[nxt]
             if alive is not None:
-                step_move = step_move * alive[:, step + 1, :, None].long()
-                heading[:, step + 1] = torch.where(
-                    alive[:, step + 1], nxt, heading[:, step])
+                acted = alive[:, step]
+                step_move = step_move * acted[:, :, None].long()
+                heading[:, step + 1] = torch.where(acted, nxt,
+                                                   heading[:, step])
             else:
                 heading[:, step + 1] = nxt
             displacement[:, step + 1] = displacement[:, step] + step_move

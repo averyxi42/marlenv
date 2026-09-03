@@ -22,11 +22,16 @@ HEADINGS = list(Direction)
 
 
 def episode_sequence(episode):
-    """One episode as ``(observations, actions, alive, origins)``.
+    """One episode as ``(observations, actions, alive, trained, positions)``.
 
     ``observations`` is ``(T, agents, S, S, 3)`` north-up, ``actions``
     ``(T - 1, agents)`` cardinal indices, ``alive`` ``(T, agents)`` and
-    ``origins`` ``(agents, 2)`` relative to the first agent.
+    ``positions`` ``(T, agents, 2)``.
+
+    Positions are kept for every step, not just the first. A crop can start
+    anywhere in the episode, and the agents have drifted apart by then --
+    their offsets at step 0 say nothing about their offsets at step 40. Only
+    differences are ever used, so the absolute values here do not matter.
     """
     alive = episode['alive_mask']
     frames, agents = alive.shape
@@ -51,9 +56,14 @@ def episode_sequence(episode):
             trained[last + 1, agent] = True
             trained[last + 2:, agent] = False
 
-    origins = poses[0, :, :2].astype(np.int64)
-    origins = origins - origins[0]
-    return observations, actions[:-1], alive, trained, origins
+    # a dead agent's pose is recorded as -1 once its viewpoint stops being
+    # updated; carry the last real one forward so the array stays usable
+    positions = poses[:, :, :2].astype(np.int64)
+    for agent in range(agents):
+        for step in range(1, frames):
+            if positions[step, agent, 0] < 0:
+                positions[step, agent] = positions[step - 1, agent]
+    return observations, actions[:-1], alive, trained, positions
 
 
 def build_multi_sequences(datasets, limit=None):
@@ -79,9 +89,9 @@ def build_multi_sequences(datasets, limit=None):
     alive = np.zeros((count, length, agents), bool)
     trained = np.zeros((count, length, agents), bool)
     mask = np.zeros((count, length), bool)
-    origins = np.zeros((count, agents, 2), np.int64)
+    positions = np.zeros((count, length, agents, 2), np.int64)
 
-    for index, (obs, act, liv, tra, org) in enumerate(rows):
+    for index, (obs, act, liv, tra, pos) in enumerate(rows):
         steps = min(len(obs), length)
         observations[index, :steps] = obs[:steps]
         alive[index, :steps] = liv[:steps]
@@ -89,7 +99,9 @@ def build_multi_sequences(datasets, limit=None):
         mask[index, :steps] = True
         take = min(len(act), length - 1)
         actions[index, :take] = act[:take]
-        origins[index] = org
+        positions[index, :steps] = pos[:steps]
+        # a padded tail would otherwise read as the board's top-left corner
+        positions[index, steps:] = pos[steps - 1]
 
     return {'observations': observations, 'actions': actions, 'alive': alive,
-            'trained': trained, 'mask': mask, 'origins': origins}
+            'trained': trained, 'mask': mask, 'positions': positions}
