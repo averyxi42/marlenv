@@ -19,6 +19,8 @@ Two paths exist and must agree.
     is a property worth stating, because it is what makes the fast path both
     simple and provably equal to the slow one.
 """
+import functools
+
 import torch
 import torch.nn.functional as F
 
@@ -60,22 +62,51 @@ def dense_mask(time, is_action, window=None):
     return allowed[None, None]
 
 
-def build_mask(time, is_action, window=None, prefer_flex=True):
-    """A mask object suitable for :func:`attend`.
+#: FlexAttention only pays off once compiled; uncompiled it materialises the
+#: whole score matrix and measured 1.5x slower than SDPA at our lengths, so it
+#: is opt-in rather than the default.
+USE_FLEX = False
 
-    Returns a FlexAttention ``BlockMask`` when available, otherwise a dense
-    boolean tensor. Both describe the same rule.
-    """
-    tokens = time.shape[0]
-    if prefer_flex and FLEX_AVAILABLE and time.device.type == 'cuda':
+_compiled_flex = None
+
+
+def _flex():
+    global _compiled_flex
+    if _compiled_flex is None:
+        _compiled_flex = torch.compile(flex_attention, dynamic=False)
+    return _compiled_flex
+
+
+@functools.lru_cache(maxsize=32)
+def _cached_mask(key, tokens, window, device, flex):
+    time, is_action = _MASK_INPUTS[key]
+    if flex:
         predicate = mask_predicate(time, is_action, window)
         return create_block_mask(predicate, B=None, H=None, Q_LEN=tokens,
-                                 KV_LEN=tokens, device=time.device)
+                                 KV_LEN=tokens, device=device)
     return dense_mask(time, is_action, window)
+
+
+_MASK_INPUTS = {}
+
+
+def build_mask(time, is_action, window=None, prefer_flex=None):
+    """A mask object suitable for :func:`attend`, cached by shape.
+
+    The mask depends only on the sequence length and window, never on the
+    batch, so rebuilding it every forward was pure overhead -- and building a
+    BlockMask is not cheap.
+    """
+    tokens = int(time.shape[0])
+    flex = (USE_FLEX if prefer_flex is None else prefer_flex)
+    flex = flex and FLEX_AVAILABLE and time.device.type == 'cuda'
+    key = (tokens, bool(flex))
+    _MASK_INPUTS[key] = (time, is_action)
+    return _cached_mask(key, tokens, window, time.device, flex)
 
 
 def attend(query, key, value, mask):
     """Dispatch to FlexAttention or SDPA depending on the mask type."""
-    if FLEX_AVAILABLE and not torch.is_tensor(mask) and mask is not None:
-        return flex_attention(query, key, value, block_mask=mask)
+    if FLEX_AVAILABLE and mask is not None and not torch.is_tensor(mask):
+        return _flex()(query, key, value, block_mask=mask)
     return F.scaled_dot_product_attention(query, key, value, attn_mask=mask)
