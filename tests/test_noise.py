@@ -11,9 +11,11 @@ SIGMA = 8.0
 
 @pytest.fixture
 def env():
+    # gradient off: these tests are about the noise fields, and the gradient
+    # would add its own colour variation on top
     return gym.make('Snake-v1', height=13, width=13, num_snakes=2,
                     num_fruits=3, observation_noise=SIGMA, noise_period=4,
-                    disable_env_checker=True)
+                    background_gradient=0.0, disable_env_checker=True)
 
 
 def test_noise_fields_have_the_documented_shapes(env):
@@ -29,7 +31,8 @@ def test_noise_makes_the_observation_continuous(env):
     noisy = env.unwrapped.render('rgb_array')
 
     clean_env = gym.make('Snake-v1', height=13, width=13, num_snakes=2,
-                         num_fruits=3, disable_env_checker=True)
+                         num_fruits=3, background_gradient=0.0,
+                         disable_env_checker=True)
     clean_env.reset(seed=0)
     clean = clean_env.unwrapped.render('rgb_array')
 
@@ -76,7 +79,7 @@ def test_texture_does_not_drift_along_the_body():
     """
     env = gym.make('Snake-v1', height=13, width=13, num_snakes=1,
                    num_fruits=3, observation_noise=SIGMA, noise_period=4,
-                   disable_env_checker=True)
+                   background_gradient=0.0, disable_env_checker=True)
     env.reset(seed=2)
     env.action_space.seed(2)
     base = env.unwrapped
@@ -128,7 +131,8 @@ def test_noise_does_not_disturb_the_dynamics():
     """Noise draws come from a spawned stream, so episodes stay paired."""
     def trajectory(sigma):
         env = gym.make('Snake-v1', height=13, width=13, num_snakes=2,
-                       observation_noise=sigma, disable_env_checker=True)
+                       observation_noise=sigma, background_gradient=0.0,
+                       disable_env_checker=True)
         env.reset(seed=7)
         env.action_space.seed(7)
         grids = [env.unwrapped.grid.copy()]
@@ -153,7 +157,7 @@ def test_noise_is_reproducible(env):
 
 def test_noise_is_off_by_default():
     env = gym.make('Snake-v1', height=11, width=11, num_snakes=1,
-                   disable_env_checker=True)
+                   background_gradient=0.0, disable_env_checker=True)
     env.reset(seed=0)
 
     assert env.unwrapped.obs_noise is None
@@ -176,6 +180,7 @@ def test_background_and_snake_sigmas_are_independent():
     """Each field can be scaled, or switched off, without the other."""
     quiet_snakes = gym.make('Snake-v1', height=13, width=13, num_snakes=2,
                             observation_noise=10.0, snake_noise_sigma=0.0,
+                            background_gradient=0.0,
                             disable_env_checker=True)
     quiet_snakes.reset(seed=0)
     base = quiet_snakes.unwrapped
@@ -184,6 +189,7 @@ def test_background_and_snake_sigmas_are_independent():
 
     quiet_background = gym.make('Snake-v1', height=13, width=13, num_snakes=2,
                                 observation_noise=0.0, snake_noise_sigma=25.0,
+                                background_gradient=0.0,
                                 disable_env_checker=True)
     quiet_background.reset(seed=0)
     base = quiet_background.unwrapped
@@ -193,7 +199,8 @@ def test_background_and_snake_sigmas_are_independent():
 
 def test_snake_sigma_defaults_to_the_background_sigma():
     env = gym.make('Snake-v1', height=13, width=13, num_snakes=2,
-                   observation_noise=7.0, disable_env_checker=True)
+                   observation_noise=7.0, background_gradient=0.0,
+                   disable_env_checker=True)
     env.reset(seed=0)
 
     noise = env.unwrapped.obs_noise

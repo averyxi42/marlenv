@@ -9,10 +9,13 @@ EMPTY_RGB = np.array(CellColors[Cell.EMPTY.value][0], dtype=np.uint8)
 WALL_RGB = np.array(CellColors[Cell.WALL.value][0], dtype=np.uint8)
 
 
-def make(radius=4, noise=0.0, num_snakes=3, side=13):
+def make(radius=4, noise=0.0, num_snakes=3, side=13, gradient=0.0):
+    # the heading gradient is off unless a test is about it, so the others
+    # can compare against exact palette colours
     env = gym.make('Snake-v1', height=side, width=side,
                    num_snakes=num_snakes, num_fruits=3,
                    view_radius=radius, observation_noise=noise,
+                   background_gradient=gradient,
                    disable_env_checker=True)
     return env
 

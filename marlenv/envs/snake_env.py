@@ -15,7 +15,8 @@ from marlenv.core.grid_util import (
     rgb_from_grid, image_from_grid, image_from_rgb, add_obstacles,
     MEAN_OBSTACLE_AREA)
 from marlenv.core.noise import ObservationNoise
-from marlenv.core.observation import egocentric_crop, pad_grid
+from marlenv.core.observation import (composite_background, egocentric_crop,
+                                      heading_gradient, pad_grid)
 from marlenv.core.render import draw_frame, image_from_env
 from marlenv.core.snake import Direction, Snake, Cell, CellColors
 from marlenv.envs.constants import FEATURE_CHANNEL, RGB_CHANNEL
@@ -94,6 +95,13 @@ class SnakeEnv(gym.Env):
         # (2 * view_radius + 1) square. None disables it. Distinct from
         # vision_range, which crops the learned feature planes.
         self.view_radius = kwargs.pop('view_radius', None)
+
+        # World-anchored colour field on the background. Egocentric views are
+        # rotated into the head frame, so without an absolute cue like this a
+        # snake cannot tell which way it faces from its own observation.
+        self.background_gradient = kwargs.pop('background_gradient', 28.0)
+        self.gradient_period = kwargs.pop('gradient_period', 6)
+        self.gradient_angle = kwargs.pop('gradient_angle', 0.0)
 
         self.grid_size_range = kwargs.pop('grid_size_range', None)
         # obstacle_density is the fraction of interior cells walled off;
@@ -285,18 +293,26 @@ class SnakeEnv(gym.Env):
             pass
 
     def _classic_rgb(self):
-        """One pixel per cell, plus this episode's bound noise if enabled."""
-        rgb_array = rgb_from_grid(self.grid, Cell, CellColors)
-        if self.obs_noise is not None:
-            rgb_array = self.obs_noise.apply(rgb_array, self.snakes)
-        return rgb_array
+        """One pixel per cell, with the background effects applied."""
+        return self._padded_rgb(0)
 
     def _padded_rgb(self, pad):
         """The board rendered with ``pad`` cells of free space around it."""
         rgb_array = rgb_from_grid(pad_grid(self.grid, pad), Cell, CellColors)
+        background = None
+        if self.background_gradient:
+            background = heading_gradient(
+                rgb_array.shape[:2], pad=pad, period=self.gradient_period,
+                amplitude=self.background_gradient,
+                angle=self.gradient_angle)
         if self.obs_noise is not None:
-            rgb_array = self.obs_noise.apply(rgb_array, self.snakes, pad=pad)
-        return rgb_array
+            field = self.obs_noise.cell_field(rgb_array.shape[:2], pad)
+            background = field if background is None else background + field
+        if background is None:
+            return rgb_array
+        return composite_background(rgb_array, self.snakes, pad=pad,
+                                    background=background,
+                                    noise=self.obs_noise)
 
     def egocentric_rgb(self):
         """Each snake's own view: ``(num_snakes, size, size, 3)`` uint8.

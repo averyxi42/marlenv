@@ -67,7 +67,15 @@ def parse_args():
     p.add_argument('--observation-noise', type=float, default=2.0,
                    help='sigma of the bound RGB observation noise '
                         '(classic style; 0 disables)')
-    p.add_argument('--snake-noise', type=float, default=8.0,
+    p.add_argument('--gradient-angle', type=float, default=0.0,
+                   help='direction of the gradient stripes, in degrees; '
+                        '0 runs along the rows')
+    p.add_argument('--background-gradient', type=float, default=28.0,
+                   help='amplitude of the world-anchored heading gradient '
+                        '(0 disables)')
+    p.add_argument('--gradient-period', type=int, default=6,
+                   help='period of the heading gradient, in cells')
+    p.add_argument('--snake-noise', type=float, default=16.0,
                    help='sigma of the per-snake noise; defaults to '
                         '--observation-noise')
     p.add_argument('--noise-period', type=int, default=3,
@@ -185,6 +193,9 @@ def main():
         view_radius=args.view_radius,
         observation_noise=args.observation_noise,
         snake_noise_sigma=args.snake_noise,
+        background_gradient=args.background_gradient,
+        gradient_period=args.gradient_period,
+        gradient_angle=args.gradient_angle,
         noise_period=args.noise_period,
         obstacle_density=args.obstacle_density,
         grid_size_range=(tuple(args.grid_size_range)

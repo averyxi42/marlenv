@@ -45,24 +45,20 @@ class ObservationNoise:
             0.0, self.snake_sigma,
             size=(num_snakes, self.period, 3)).astype(np.float32)
 
-    def apply(self, rgb, snakes, pad=0):
-        """Return ``rgb`` with the bound noise added, as uint8.
-
-        ``pad`` says how many cells of padding ``rgb`` already carries, so
-        the same field serves both the plain board and a padded render and
-        a cell keeps its value in either.
-        """
+    def cell_field(self, shape, pad=0):
+        """The slice of the cell field matching a frame of this shape."""
         offset = self.pad - pad
-        height, width = rgb.shape[:2]
-        field = self.cell_noise[offset:offset + height,
-                                offset:offset + width]
-        out = rgb.astype(np.float32) + field
-        for snake in snakes:
-            if not snake.alive:
-                continue
-            row = self.snake_noise[snake.idx % len(self.snake_noise)]
-            for distance, (r, c) in enumerate(snake.coords):
-                r, c = r + pad, c + pad
-                if 0 <= r < height and 0 <= c < width:
-                    out[r, c] = rgb[r, c] + row[distance % self.period]
-        return np.clip(out, 0, 255).astype(np.uint8)
+        return self.cell_noise[offset:offset + shape[0],
+                               offset:offset + shape[1]]
+
+    def snake_offset(self, snake_idx, distance):
+        """The offset for a body segment, keyed by distance from the head."""
+        row = self.snake_noise[snake_idx % len(self.snake_noise)]
+        return row[distance % self.period]
+
+    def apply(self, rgb, snakes, pad=0):
+        """Return ``rgb`` with the bound noise added, as uint8."""
+        from marlenv.core.observation import composite_background
+        return composite_background(
+            rgb, snakes, pad=pad,
+            background=self.cell_field(rgb.shape[:2], pad), noise=self)
