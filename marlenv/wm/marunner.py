@@ -153,7 +153,10 @@ class MultiAgentRunner:
         """One full step: decide actions, then generate the frames."""
         actions = self.sample_actions(fixed, action_steps, generator)
         frame = self.generate_frame(actions, denoise_steps, generator)
-        self.commit(actions, frame)
+        # a viewpoint whose centre is no longer its own head has died; it is
+        # masked out of the conditioning from here on, as in the cached path
+        died = looks_dead(frame[0, 0]).to(self.alive.device)
+        self.commit(actions, frame, self.alive[:, -1].reshape(-1) & ~died)
         return actions, frame
 
 
@@ -287,7 +290,7 @@ class CachedMultiRunner(MultiAgentRunner):
     def generate_frame(self, actions, denoise_steps=16, generator=None):
         agents = self.living
         shape = (1, 1, self.num_agents, *self.frames.shape[3:])
-        out = torch.full(shape, -1.0, device=self.device)   # dead read black
+        out = torch.full(shape, -1.0, device=self.device)   # dead: a filler
         if not agents:
             return out
 
@@ -326,7 +329,7 @@ class CachedMultiRunner(MultiAgentRunner):
         self.displacement = self.displacement + step_move
         self.time += 1
 
-        # the black frame is the model's own death signal, so read it back
+        # death is a property of the observation: read it off the centre cell
         died = looks_dead(frame[0, 0])
         for agent in range(self.num_agents):
             if self.live[agent] and bool(died[agent]):

@@ -119,12 +119,11 @@ class Session:
             to_model_input(views[None, None])).to(device))
         self.headings = [s.direction for s in base.snakes]
 
-        snake = base.snakes[self.agent]
         self.canvas = CanvasIntegrator(args.side, args.side,
                                        args.view_radius, decay=args.decay)
-        self.pose = make_pose(snake.head_coord[0], snake.head_coord[1],
-                              snake.direction)
-        self.canvas.add(views[self.agent], self.pose)
+        self.poses = [make_pose(s.head_coord[0], s.head_coord[1], s.direction)
+                      for s in base.snakes]
+        self.paint(views)
         self.alive = True
         self.steps = 0
         self.generator = torch.Generator(device=device).manual_seed(seed)
@@ -135,10 +134,51 @@ class Session:
         return np.stack([unrotate_view(v, s.direction) for v, s
                          in zip(base.egocentric_rgb(), base.snakes)])
 
-    def dream(self):
-        return to_pixels(self.runner.frames[0, -1, self.agent].cpu().numpy())
+    def dream(self, agent=None):
+        """The frames the model just generated, as north-up pixels.
+
+        With an agent index, that agent's view; without one, every agent's.
+        """
+        frames = self.runner.frames[0, -1]
+        if agent is not None:
+            return to_pixels(frames[agent].cpu().numpy())
+        return [to_pixels(frame.cpu().numpy()) for frame in frames]
+
+    @property
+    def pose(self):
+        """The played agent's pose, for the head marker and the status line."""
+        return self.poses[self.agent]
+
+    @property
+    def living(self):
+        """Indices of the viewpoints still being updated."""
+        alive = self.runner.alive[0, -1]
+        return [i for i in range(len(self.poses)) if bool(alive[i])]
+
+    def paint(self, views):
+        """Composite every living agent's view onto the shared canvas.
+
+        All the agents look at the same board, so all of their views belong
+        on it; painting only the played one threw away most of what the model
+        generates each step, and left the canvas as sparse as a single-agent
+        rollout. Dead viewpoints are skipped -- the runner keeps a black
+        placeholder in their slot, which is not a view of anything.
+
+        Ageing happens once for the whole step rather than once per view, or
+        the canvas would fade N times faster with N agents. The played agent
+        goes last so its own view wins wherever the views overlap.
+        """
+        self.canvas.fade()
+        order = [i for i in self.living if i != self.agent]
+        if self.agent in self.living:
+            order.append(self.agent)
+        for index in order:
+            self.canvas.paste(views[index], self.poses[index])
 
     def step(self, cardinal):
+        # captured before the step: a viewpoint that dies this step still
+        # advances into the cell it died entering, and freezes after that
+        moving = self.living
         fixed = None
         if not self.args.autonomous and cardinal is not None:
             heading = self.headings[self.agent]
@@ -152,10 +192,12 @@ class Session:
                                       generator=self.generator)
         chosen = [HEADINGS[int(a)] for a in actions]
         self.headings = chosen
-        self.pose = make_pose(self.pose.row + chosen[self.agent].value[0],
-                              self.pose.col + chosen[self.agent].value[1],
-                              chosen[self.agent])
-        self.canvas.add(self.dream(), self.pose)
+        for index in moving:
+            heading = chosen[index]
+            pose = self.poses[index]
+            self.poses[index] = make_pose(pose.row + heading.value[0],
+                                          pose.col + heading.value[1], heading)
+        self.paint(self.dream())
 
         # the simulator takes the same joint action, converted to relative
         if self.alive:
@@ -173,7 +215,7 @@ class Session:
 
 
 def compose(session, args, snapped):
-    view = session.dream()
+    view = session.dream(session.agent)
     if snapped:
         view = snap_to_palette(view, PALETTE_SNAKES)
     panels = [np.repeat(np.repeat(view, args.scale, 0), args.scale, 1)]
@@ -255,7 +297,7 @@ def main():
             pygame.K_LEFT: Direction.LEFT, pygame.K_a: Direction.LEFT,
             pygame.K_RIGHT: Direction.RIGHT, pygame.K_d: Direction.RIGHT}
 
-    pending, snapped, paused, running = None, True, False, True
+    pending, snapped, paused, running = None, True, True, True
     frames, last_move = [], 0.0
     while running:
         for event in pygame.event.get():

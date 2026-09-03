@@ -53,12 +53,24 @@ class CanvasIntegrator:
     def to_canvas(self, row, col):
         return row + self.origin[0], col + self.origin[1]
 
-    def add(self, view, pose):
-        """Fade the canvas, then paste a world-up view centred on ``pose``."""
-        view = np.asarray(view, dtype=np.float32)
+    def fade(self):
+        """Age the whole canvas by one step.
+
+        Separate from pasting because several viewpoints can contribute to
+        the same step -- one per agent -- and the canvas should age once per
+        step rather than once per view.
+        """
         if self.decay != 1.0:
             self.buffer *= self.decay
 
+    def add(self, view, pose):
+        """Fade the canvas, then paste a world-up view centred on ``pose``."""
+        self.fade()
+        return self.paste(view, pose)
+
+    def paste(self, view, pose):
+        """Write a world-up view centred on ``pose``, without ageing."""
+        view = np.asarray(view, dtype=np.float32)
         row, col = self.to_canvas(pose.row, pose.col)
         top, left = row - self.radius, col - self.radius
         bottom, right = top + view.shape[0], left + view.shape[1]
