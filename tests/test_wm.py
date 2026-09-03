@@ -16,7 +16,8 @@ from marlenv.wm.diffusion import (add_noise, alpha_sigma,  # noqa: E402
                                   training_loss)
 from marlenv.wm.interactive import (WorldModelPlayer,  # noqa: E402
                                     cardinal_to_ego, world_up)
-from marlenv.wm.model import WorldModel  # noqa: E402
+from marlenv.wm.model import (HEADINGS, WorldModel,  # noqa: E402
+                              _FORWARD, _RIGHTWARD)
 
 
 def tiny_model():
@@ -364,3 +365,102 @@ def test_world_sequences_use_four_actions():
 
     assert set(ego_actions.tolist()) == {0}
     assert set(world_actions.tolist()) == {3}
+
+
+# --------------------------------------------------- shared RoPE coordinates
+def test_shared_coordinates_are_head_relative_in_cells():
+    """Patch grid contributes in patches * cells; displacement in cells."""
+    model = WorldModel(num_actions=4, frame='world', dim=64, depth=1, heads=4)
+    offsets = model.patch_offsets('cpu')
+
+    # view 9, patch 3, radius 4 -> centres at -3, 0, 3
+    assert sorted({int(x) for x in offsets[:, 0]}) == [-3, 0, 3]
+    # the middle patch sits exactly on the head
+    assert tuple(int(v) for v in offsets[len(offsets) // 2]) == (0, 0)
+
+
+def test_action_token_shares_the_central_patch_coordinate():
+    """Both sit at the agent: the action is taken where the agent is."""
+    model = WorldModel(num_actions=4, frame='world', dim=64, depth=1, heads=4)
+    actions = torch.tensor([[0, 0, 0]])          # three steps up
+
+    coords = model.token_coords(4, 'cpu', actions)[0]
+    types = model.token_types(4, 'cpu')
+    per_frame = model.tokens_per_frame
+    centre = per_frame // 2
+
+    index = 0
+    for step in range(3):
+        frame_coords = coords[index:index + per_frame]
+        index += per_frame
+        action_coord = coords[index]
+        index += 1
+        assert torch.equal(frame_coords[centre, 1:], action_coord[1:])
+
+
+def test_one_world_cell_keeps_one_coordinate():
+    """The property the whole change exists for."""
+    for frame, num_actions in (('world', 4), ('ego', 3)):
+        model = WorldModel(num_actions=num_actions, frame=frame, dim=64,
+                           depth=1, heads=4)
+        actions = torch.tensor([[0, 1, 0, 2, 0]])
+        coords = model.token_coords(6, 'cpu', actions)[0]
+        types = model.token_types(6, 'cpu')
+        offsets = model.patch_offsets('cpu')
+        displacement, heading = model.trajectory(actions)
+
+        seen = {}
+        index = 0
+        for step in range(6):
+            for k in range(model.tokens_per_frame):
+                # world cell this token covers, per the model's own
+                # bookkeeping
+                du, dv = (int(v) for v in offsets[k])
+                if frame == 'world':
+                    local = (du, dv)
+                else:
+                    head = HEADINGS[int(heading[0, step])]
+                    forward = _FORWARD[head]
+                    right = _RIGHTWARD[head]
+                    local = (-du * forward[0] + dv * right[0],
+                             -du * forward[1] + dv * right[1])
+                shift = displacement[0, step]
+                cell = (local[0] + int(shift[0]), local[1] + int(shift[1]))
+                code = tuple(int(v) for v in coords[index, 1:])
+                if cell in seen:
+                    assert seen[cell] == code, f'{frame}: {cell} moved'
+                seen[cell] = code
+                index += 1
+            if step < 5:
+                index += 1
+
+
+def test_unaligned_coordinates_reuse_the_same_grid():
+    """The old behaviour, kept for checkpoints trained with it."""
+    model = WorldModel(num_actions=4, frame='world', dim=64, depth=1,
+                       heads=4, align_coords=False)
+    coords = model.token_coords(3, 'cpu', torch.tensor([[0, 0]]))[0]
+    types = model.token_types(3, 'cpu')
+    per_frame = model.tokens_per_frame
+
+    first = coords[:per_frame, 1:]
+    second = coords[per_frame + 1:2 * per_frame + 1, 1:]
+    assert torch.equal(first, second), 'unaligned frames should share a grid'
+
+
+def test_player_keeps_actions_aligned_with_frames_through_eviction():
+    """Shared coordinates dead-reckon from the window's actions.
+
+    One action fewer than frames, always -- otherwise the displacement the
+    model integrates does not describe the frames it is given.
+    """
+    model = WorldModel(num_actions=4, frame='world', dim=64, depth=2,
+                       heads=4)
+    player = WorldModelPlayer(model, np.zeros((9, 9, 3), np.uint8),
+                              Direction.UP, context=5, denoise_steps=1,
+                              frame='world')
+
+    for _ in range(12):
+        player.step(Direction.UP)
+        assert len(player.actions) == player.history.shape[1] - 1
+    assert player.history.shape[1] == 5

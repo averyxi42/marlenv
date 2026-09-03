@@ -128,11 +128,24 @@ class WorldModelPlayer:
             self.poses.append(self.pose)
         self.steps += 1
 
-        if self.history.shape[1] > self.context:
-            drop = self.history.shape[1] - self.context
-            self.history = self.history[:, drop:]
-            self.actions = self.actions[drop:]
+        self._trim()
         return action
+
+    def _trim(self):
+        """Slide the window, keeping actions aligned with the frames.
+
+        With shared coordinates the model dead-reckons displacement from the
+        actions it is given, so the window must always carry exactly one
+        fewer action than frames. Re-basing the origin on the window start is
+        harmless: RoPE reads differences, and shifting every coordinate by a
+        constant leaves those unchanged.
+        """
+        extra = self.history.shape[1] - self.context
+        if extra > 0:
+            self.history = self.history[:, extra:]
+            self.actions = self.actions[extra:]
+        assert len(self.actions) == self.history.shape[1] - 1, (
+            'actions and frames fell out of step')
 
     def bootstrap(self, observations, headings, actions, poses=None):
         """Seed the history with real frames before handing over.
@@ -153,10 +166,7 @@ class WorldModelPlayer:
                                          self.pose.col + heading.value[1],
                                          heading)
                 self.poses.append(self.pose)
-        if self.history.shape[1] > self.context:
-            drop = self.history.shape[1] - self.context
-            self.history = self.history[:, drop:]
-            self.actions = self.actions[drop:]
+        self._trim()
 
 
 class SimulatorReference:

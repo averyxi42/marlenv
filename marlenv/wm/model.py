@@ -5,9 +5,23 @@ repeated. Attention is causal across steps, with the patch tokens of one
 frame free to attend to each other: they are a single observation being
 denoised jointly, and forcing an order on them would be arbitrary.
 
-Positions use axial RoPE over (time, height, width). Action tokens sit at
-the spatial origin and carry a learned type embedding, so the model can tell
-conditioning from content without a separate stream.
+Positions use axial RoPE over (time, height, width), and the spatial part is
+expressed in a frame **shared across the sequence** rather than each view's
+own. Without that, patch (1, 1) of frame t and patch (1, 1) of frame t - 5
+carry the same positional code while being different cells of the world, and
+relative-position attention is asserting an alignment that is false. Adding
+the displacement dead-reckoned from the actions makes one world cell keep one
+code for as long as it is in view, which is the case RoPE is good at.
+
+Coordinates are head-relative and in *cells*, not patches: the agent moves one
+cell per step while a patch spans three, so mixing the two units would be
+wrong by that factor. The agent itself therefore sits at the cumulative
+displacement, and that is where each action token goes -- the action happens
+at the agent's position, and it no longer collides with patch (0, 0).
+
+The displacement comes from the actions the model is already given, so nothing
+new is conditioned on, and only differences of coordinates ever matter, so no
+absolute position on the board leaks in.
 
 Each frame carries its own diffusion level, which is what makes this
 diffusion *forcing* rather than plain video diffusion: with independent
@@ -19,6 +33,15 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from marlenv.core.snake import Direction
+from marlenv.grading.poses import LEFT_TURN, RIGHT_TURN
+
+HEADINGS = list(Direction)
+# head-frame offsets rotate into the shared frame by the current heading:
+# "up" in a head-frame view is whichever way the agent is actually facing
+_FORWARD = {h: (-h.value[0], -h.value[1]) for h in Direction}
+_RIGHTWARD = {h: RIGHT_TURN[h].value for h in Direction}
 
 
 def axial_rope_frequencies(dim, positions, base=10_000.0):
@@ -50,14 +73,14 @@ class AxialRope(nn.Module):
                        per_axis // 2 * 2, per_axis // 2 * 2)
 
     def forward(self, coords):
-        """``coords`` is ``(tokens, 3)`` of time, row, col."""
+        """``coords`` is ``(batch, tokens, 3)`` of time, row, col."""
         parts = []
         for axis, size in enumerate(self.splits):
-            cos, sin = axial_rope_frequencies(size, coords[:, axis])
-            parts.append((cos, sin, size))
-        cos = torch.cat([c for c, _, _ in parts], dim=-1)
-        sin = torch.cat([s for _, s, _ in parts], dim=-1)
-        return cos[None, None], sin[None, None]
+            cos, sin = axial_rope_frequencies(size, coords[..., axis])
+            parts.append((cos, sin))
+        cos = torch.cat([c for c, _ in parts], dim=-1)
+        sin = torch.cat([s for _, s in parts], dim=-1)
+        return cos[:, None], sin[:, None]
 
 
 class Attention(nn.Module):
@@ -106,10 +129,16 @@ class WorldModel(nn.Module):
     """Predicts the noise on each frame's patches, given the past."""
 
     def __init__(self, view=9, patch=3, channels=3, num_actions=3,
-                 dim=256, depth=6, heads=8):
+                 dim=256, depth=6, heads=8, frame='world',
+                 align_coords=True):
         super().__init__()
         if view % patch:
             raise ValueError('view size must divide into whole patches')
+        if frame not in ('ego', 'world'):
+            raise ValueError("frame must be 'ego' or 'world'")
+        self.frame = frame
+        self.align_coords = align_coords
+        self.radius = view // 2
         self.view, self.patch = view, patch
         self.grid = view // patch
         self.tokens_per_frame = self.grid ** 2
@@ -145,24 +174,96 @@ class WorldModel(nn.Module):
         x = x.reshape(b, t, -1, self.view, self.view)
         return x.permute(0, 1, 3, 4, 2)
 
-    def token_coords(self, steps, device):
-        """``(tokens, 3)`` of time, row, col for one interleaved sequence."""
-        rows = torch.arange(self.grid, device=device)
-        grid_r, grid_c = torch.meshgrid(rows, rows, indexing='ij')
-        spatial = torch.stack([grid_r.reshape(-1), grid_c.reshape(-1)], -1)
+    def patch_offsets(self, device):
+        """Head-relative cell offset of each patch centre, ``(tokens, 2)``."""
+        index = torch.arange(self.grid, device=device)
+        centre = index * self.patch + self.patch // 2 - self.radius
+        rows, cols = torch.meshgrid(centre, centre, indexing='ij')
+        return torch.stack([rows.reshape(-1), cols.reshape(-1)], dim=-1)
 
-        coords = []
+    def trajectory(self, actions):
+        """Displacement and heading per frame, dead-reckoned from actions.
+
+        Returns ``(displacement (b, t, 2), heading (b, t))``. The first frame
+        is the origin facing up; only differences matter, so that choice is
+        just a gauge.
+        """
+        batch, transitions = actions.shape
+        device = actions.device
+        steps = transitions + 1
+
+        displacement = torch.zeros(batch, steps, 2, dtype=torch.long,
+                                   device=device)
+        heading = torch.zeros(batch, steps, dtype=torch.long, device=device)
+        moves = torch.tensor([h.value for h in HEADINGS], device=device)
+        if self.frame == 'ego':
+            turn_table = torch.tensor(
+                [[HEADINGS.index(h) for h in HEADINGS],
+                 [HEADINGS.index(LEFT_TURN[h]) for h in HEADINGS],
+                 [HEADINGS.index(RIGHT_TURN[h]) for h in HEADINGS]],
+                device=device)
+
+        for step in range(transitions):
+            action = actions[:, step]
+            if self.frame == 'world':
+                nxt = action                      # the cardinal itself
+            else:
+                nxt = turn_table[action, heading[:, step]]
+            heading[:, step + 1] = nxt
+            displacement[:, step + 1] = displacement[:, step] + moves[nxt]
+        return displacement, heading
+
+    def token_coords(self, steps, device, actions=None):
+        """``(batch, tokens, 3)`` of time, row, col.
+
+        With ``align_coords`` the spatial part is shared across the sequence,
+        so one world cell keeps one code while it stays in view.
+        """
+        offsets = self.patch_offsets(device)
+        if not self.align_coords or actions is None:
+            spatial = offsets + self.radius            # back to 0-based
+            pieces = []
+            for step in range(steps):
+                time = torch.full((self.tokens_per_frame, 1), step,
+                                  device=device)
+                pieces.append(torch.cat([time, spatial], dim=-1))
+                if step < steps - 1:
+                    pieces.append(torch.tensor([[step, 0, 0]], device=device))
+            return torch.cat(pieces).long()[None]
+
+        displacement, heading = self.trajectory(actions)
+        batch = displacement.shape[0]
+        forward = torch.tensor([_FORWARD[h] for h in HEADINGS], device=device)
+        rightward = torch.tensor([_RIGHTWARD[h] for h in HEADINGS],
+                                 device=device)
+
+        pieces = []
         for step in range(steps):
-            time = torch.full((self.tokens_per_frame, 1), step, device=device)
-            coords.append(torch.cat([time, spatial], dim=-1))
+            shift = displacement[:, step]                      # (b, 2)
+            if self.frame == 'world':
+                world = offsets[None].expand(batch, -1, -1)
+            else:
+                # a head-frame offset points along the heading, so rotate it
+                head = heading[:, step]
+                du = offsets[None, :, 0].to(forward.dtype)
+                dv = offsets[None, :, 1].to(forward.dtype)
+                world = (-du[..., None] * forward[head][:, None]
+                         + dv[..., None] * rightward[head][:, None])
+            spatial = world + shift[:, None]
+            time = torch.full((batch, self.tokens_per_frame, 1), step,
+                              device=device)
+            pieces.append(torch.cat([time, spatial], dim=-1))
             if step < steps - 1:
-                # the action sits at the spatial origin of its own step
-                coords.append(torch.tensor([[step, 0, 0]], device=device))
-        return torch.cat(coords).long()
+                # the action happens where the agent is
+                action_at = torch.cat(
+                    [torch.full((batch, 1, 1), step, device=device),
+                     shift[:, None]], dim=-1)
+                pieces.append(action_at)
+        return torch.cat(pieces, dim=1).long()
 
     def attention_mask(self, steps, device):
         """Causal across steps, bidirectional inside one observation."""
-        coords = self.token_coords(steps, device)
+        coords = self.token_coords(steps, device)[0]
         time = coords[:, 0]
         is_action = self.token_types(steps, device) == 1
 
@@ -208,7 +309,7 @@ class WorldModel(nn.Module):
         types = self.token_types(steps, device)
         x = x + self.type_embedding(types)[None]
 
-        cos, sin = self.rope(self.token_coords(steps, device))
+        cos, sin = self.rope(self.token_coords(steps, device, actions))
         mask = self.attention_mask(steps, device)
         for block in self.blocks:
             x = block(x, cos, sin, mask)

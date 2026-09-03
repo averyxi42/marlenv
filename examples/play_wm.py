@@ -84,7 +84,11 @@ def load_model(path, device):
     model = WorldModel(view=state.get('view', 9), dim=state['dim'],
                        depth=state['depth'], heads=state['heads'],
                        num_actions=state.get('num_actions',
-                                             3 if frame == 'ego' else 4))
+                                             3 if frame == 'ego' else 4),
+                       frame=frame,
+                       # checkpoints predating shared coordinates used the
+                       # per-frame grid, and must keep using it
+                       align_coords=state.get('align_coords', False))
     model.load_state_dict(state['model'])
     return model.to(device).eval(), state.get('context', 24), frame
 
@@ -222,7 +226,8 @@ def main():
     args = parse_args()
     device = args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
     model, context, frame = load_model(args.model, device)
-    print(f'model frame: {frame}')
+    context = 24
+    print(f'model frame: {frame}   aligned coords: {model.align_coords}')
 
     if args.demo:
         session = Session(args, model, context, device, args.seed, frame)

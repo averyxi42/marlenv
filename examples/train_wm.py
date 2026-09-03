@@ -25,6 +25,12 @@ def parse_args():
                    help="'world' un-rotates views to north-up and uses the "
                         'four cardinal actions, so consecutive frames differ '
                         'by a pure translation')
+    p.add_argument('--align-coords', dest='align_coords',
+                   action='store_true', default=True,
+                   help='share spatial RoPE coordinates across the sequence '
+                        '(default)')
+    p.add_argument('--no-align-coords', dest='align_coords',
+                   action='store_false')
     p.add_argument('--context', type=int, default=24)
     p.add_argument('--steps', type=int, default=4000)
     p.add_argument('--batch-size', type=int, default=32)
@@ -90,9 +96,11 @@ def main():
     view = sequences['observations'].shape[2]
     num_actions = 3 if args.frame == 'ego' else 4
     model = WorldModel(view=view, dim=args.dim, depth=args.depth,
-                       heads=args.heads, num_actions=num_actions)
+                       heads=args.heads, num_actions=num_actions,
+                       frame=args.frame, align_coords=args.align_coords)
     params = sum(p.numel() for p in model.parameters())
-    print(f'frame={args.frame}  actions={num_actions}')
+    print(f'frame={args.frame}  actions={num_actions}  '
+          f'aligned_coords={args.align_coords}')
     print(f'device={device}  params={params / 1e6:.2f}M  '
           f'context={args.context}  tokens/seq='
           f'{args.context * (model.tokens_per_frame + 1) - 1}')
@@ -103,7 +111,9 @@ def main():
         torch.save({'model': model.state_dict(), 'view': view,
                     'dim': args.dim, 'depth': args.depth, 'heads': args.heads,
                     'context': args.context, 'frame': args.frame,
-                    'num_actions': num_actions, 'history': history}, path)
+                    'num_actions': num_actions,
+                    'align_coords': args.align_coords,
+                    'history': history}, path)
 
     # tau values worth watching: the low end is nearly free, and the high end
     # is what a rollout actually starts from
