@@ -56,6 +56,13 @@ def parse_args():
     p.add_argument('--bootstrap', type=int, default=1,
                    help='real frames fed in before the model takes over')
     p.add_argument('--denoise-steps', type=int, default=8)
+    p.add_argument('--no-cache', dest='use_cache', action='store_false',
+                   default=True,
+                   help='recompute the whole window each step instead of '
+                        'using the sliding-window KV cache')
+    p.add_argument('--window', type=int, default=None,
+                   help='frames of context at play time; defaults to what '
+                        'the model was trained with')
     p.add_argument('--decay', type=float, default=0.95,
                    help='canvas fade per step; 1.0 keeps everything bright')
     p.add_argument('--tick-ms', type=int, default=180,
@@ -116,8 +123,10 @@ class Session:
 
         self.player = WorldModelPlayer(
             model, self.observe(), snake.direction,
-            context=context, denoise_steps=args.denoise_steps,
+            context=args.window or context,
+            denoise_steps=args.denoise_steps,
             device=device, seed=seed, frame=frame,
+            use_cache=args.use_cache,
             pose=make_pose(snake.head_coord[0], snake.head_coord[1],
                            snake.direction))
         self.canvas = CanvasIntegrator(args.side, args.side,
@@ -226,8 +235,8 @@ def main():
     args = parse_args()
     device = args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
     model, context, frame = load_model(args.model, device)
-    context = 24
-    print(f'model frame: {frame}   aligned coords: {model.align_coords}')
+    print(f'model frame: {frame}   aligned coords: {model.align_coords}   '
+          f'trained context: {context}')
 
     if args.demo:
         session = Session(args, model, context, device, args.seed, frame)

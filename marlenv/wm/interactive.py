@@ -60,7 +60,13 @@ class WorldModelPlayer:
 
     def __init__(self, model, observation, heading, context=24,
                  denoise_steps=8, device='cpu', seed=0, pose=None,
-                 frame='ego'):
+                 frame='ego', use_cache=True):
+        """``use_cache`` runs the sliding-window KV cache path.
+
+        It is equivalent to recomputing the whole window every step, pinned
+        by a test to float precision, and avoids re-encoding the history once
+        per denoising step -- which is most of the work.
+        """
         if frame not in ('ego', 'world'):
             raise ValueError("frame must be 'ego' or 'world'")
         self.frame = frame
@@ -70,8 +76,16 @@ class WorldModelPlayer:
         self.denoise_steps = denoise_steps
         self.generator = torch.Generator(device=device).manual_seed(seed)
 
-        frame = to_model_input(np.asarray(observation)[None, None])
-        self.history = torch.from_numpy(frame).to(device)
+        first = to_model_input(np.asarray(observation)[None, None])
+        self.history = torch.from_numpy(first).to(device)
+
+        self.runner = None
+        if use_cache:
+            from marlenv.wm.runner import CachedRunner
+            self.runner = CachedRunner(model, window=context, device=device)
+            # heading 0 matches the convention WorldModel.trajectory uses when
+            # it dead-reckons a window; only coordinate differences matter
+            self.runner.reset(self.history)
         self.headings = [heading]
         self.actions = []
         self.steps = 0
@@ -113,11 +127,16 @@ class WorldModelPlayer:
         """Advance one frame. Returns the action index actually taken."""
         action, heading = self.resolve(cardinal)
 
-        actions = torch.tensor([self.actions + [action]], dtype=torch.long,
-                               device=self.device)
-        frame = denoise_next(self.model, self.history, actions,
-                             denoise_steps=self.denoise_steps,
-                             generator=self.generator)
+        if self.runner is not None:
+            frame = self.runner.step(action,
+                                     denoise_steps=self.denoise_steps,
+                                     generator=self.generator)
+        else:
+            actions = torch.tensor([self.actions + [action]],
+                                   dtype=torch.long, device=self.device)
+            frame = denoise_next(self.model, self.history, actions,
+                                 denoise_steps=self.denoise_steps,
+                                 generator=self.generator)
 
         self.history = torch.cat([self.history, frame], dim=1)
         self.actions.append(action)
@@ -156,9 +175,16 @@ class WorldModelPlayer:
         poses = poses or [None] * len(observations)
         for observation, heading, action, pose in zip(observations, headings,
                                                       actions, poses):
-            frame = to_model_input(np.asarray(observation)[None, None])
-            self.history = torch.cat(
-                [self.history, torch.from_numpy(frame).to(self.device)], 1)
+            pixels = to_model_input(np.asarray(observation)[None, None])
+            tensor = torch.from_numpy(pixels).to(self.device)
+            if self.runner is not None:
+                self.runner._commit_action(int(action))
+                self.runner._advance(int(action))
+                self.runner.time += 1
+                self.runner.cache.trim(None if self.context is None
+                                       else self.context - 1)
+                self.runner._commit_frame(tensor)
+            self.history = torch.cat([self.history, tensor], 1)
             self.actions.append(int(action))
             self.headings.append(heading)
             if self.pose is not None:

@@ -34,6 +34,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from marlenv.wm.attention import attend, build_mask
+
 from marlenv.core.snake import Direction
 from marlenv.grading.poses import LEFT_TURN, RIGHT_TURN
 
@@ -91,12 +93,16 @@ class Attention(nn.Module):
         self.qkv = nn.Linear(dim, 3 * dim, bias=False)
         self.out = nn.Linear(dim, dim, bias=False)
 
-    def forward(self, x, cos, sin, mask):
+    def forward(self, x, cos, sin, mask, cache=None, layer=None):
         batch, tokens, _ = x.shape
         qkv = self.qkv(x).view(batch, tokens, 3, self.heads, self.head_dim)
         q, k, v = qkv.permute(2, 0, 3, 1, 4)
+        # rotate with the coordinates of these tokens; cached keys were
+        # rotated with theirs when they were computed
         q, k = apply_rope(q, cos, sin), apply_rope(k, cos, sin)
-        out = F.scaled_dot_product_attention(q, k, v, attn_mask=mask)
+        if cache is not None:
+            k, v = cache.extend(layer, k, v)
+        out = attend(q, k, v, mask)
         return self.out(out.transpose(1, 2).reshape(batch, tokens, -1))
 
 
@@ -110,8 +116,8 @@ class Block(nn.Module):
             nn.Linear(dim, mlp_ratio * dim), nn.GELU(),
             nn.Linear(mlp_ratio * dim, dim))
 
-    def forward(self, x, cos, sin, mask):
-        x = x + self.attn(self.norm1(x), cos, sin, mask)
+    def forward(self, x, cos, sin, mask, cache=None, layer=None):
+        x = x + self.attn(self.norm1(x), cos, sin, mask, cache, layer)
         return x + self.mlp(self.norm2(x))
 
 
@@ -261,19 +267,11 @@ class WorldModel(nn.Module):
                 pieces.append(action_at)
         return torch.cat(pieces, dim=1).long()
 
-    def attention_mask(self, steps, device):
+    def attention_mask(self, steps, device, window=None):
         """Causal across steps, bidirectional inside one observation."""
-        coords = self.token_coords(steps, device)[0]
-        time = coords[:, 0]
+        time = self.token_coords(steps, device)[0][:, 0]
         is_action = self.token_types(steps, device) == 1
-
-        # a token may see anything from an earlier step
-        allowed = time[None, :] <= time[:, None]
-        # ... but an action token is conditioning for the *next* frame, so
-        # tokens of the same step may see it only if they are the action
-        same_step = time[None, :] == time[:, None]
-        allowed &= ~(same_step & is_action[None, :] & ~is_action[:, None])
-        return allowed[None, None]
+        return build_mask(time, is_action, window)
 
     def token_types(self, steps, device):
         types = []
@@ -284,38 +282,73 @@ class WorldModel(nn.Module):
         return torch.cat(types).long()
 
     # --------------------------------------------------------------- forward
-    def forward(self, noisy_frames, actions, tau):
-        """Predict the noise on every frame.
-
-        ``noisy_frames`` is ``(b, t, v, v, c)``, ``actions`` ``(b, t - 1)``
-        and ``tau`` ``(b, t)``, one noise level per frame.
-        """
-        batch, steps = noisy_frames.shape[:2]
-        device = noisy_frames.device
-
-        patches = self.to_tokens(self.patchify(noisy_frames))
+    def frame_tokens(self, frames, tau):
+        """Patch tokens for one or more frames, with their noise level."""
+        patches = self.to_tokens(self.patchify(frames))
         level = self.tau_embedding(timestep_embedding(tau, self.dim))
-        patches = patches + level[:, :, None, :]
+        return patches + level[:, :, None, :]
 
-        action_tokens = self.action_embedding(actions)
-
+    def interleave(self, patches, actions):
+        """``[frame 0 patches][action 0][frame 1 patches]...`` in order."""
+        steps = patches.shape[1]
         pieces = []
+        action_tokens = self.action_embedding(actions)
         for step in range(steps):
             pieces.append(patches[:, step])
             if step < steps - 1:
                 pieces.append(action_tokens[:, step:step + 1])
-        x = torch.cat(pieces, dim=1)
+        return torch.cat(pieces, dim=1)
 
+    def run_blocks(self, x, cos, sin, mask, cache=None):
+        for layer, block in enumerate(self.blocks):
+            x = block(x, cos, sin, mask, cache, layer)
+        return self.norm(x)
+
+    def predict_from(self, x):
+        """Noise prediction from patch-token hidden states."""
+        batch, tokens, _ = x.shape
+        steps = tokens // self.tokens_per_frame
+        grouped = x.reshape(batch, steps, self.tokens_per_frame, self.dim)
+        return self.unpatchify(self.to_noise(grouped))
+
+    def forward(self, noisy_frames, actions, tau, window=None):
+        """Predict the noise on every frame.
+
+        ``noisy_frames`` is ``(b, t, v, v, c)``, ``actions`` ``(b, t - 1)``
+        and ``tau`` ``(b, t)``, one noise level per frame. ``window`` limits
+        how many frames back attention may reach.
+        """
+        steps = noisy_frames.shape[1]
+        device = noisy_frames.device
+
+        x = self.interleave(self.frame_tokens(noisy_frames, tau), actions)
         types = self.token_types(steps, device)
         x = x + self.type_embedding(types)[None]
 
         cos, sin = self.rope(self.token_coords(steps, device, actions))
-        mask = self.attention_mask(steps, device)
-        for block in self.blocks:
-            x = block(x, cos, sin, mask)
-        x = self.norm(x)
+        mask = self.attention_mask(steps, device, window)
+        x = self.run_blocks(x, cos, sin, mask)
+        return self.predict_from(x[:, types == 0])
 
-        observation = types == 0
-        tokens = x[:, observation].reshape(batch, steps,
-                                           self.tokens_per_frame, self.dim)
-        return self.unpatchify(self.to_noise(tokens))
+    def forward_cached(self, frame, tau, coords, cache):
+        """Predict the noise on a single frame against a KV cache.
+
+        No mask is needed: everything in the cache is strictly earlier in
+        time, and the tokens supplied here are the patches of one frame,
+        which may attend to each other. Both are permitted by the rule the
+        full path applies, so the two agree.
+        """
+        x = self.frame_tokens(frame, tau)[:, 0]
+        x = x + self.type_embedding(
+            torch.zeros(1, dtype=torch.long, device=x.device))
+        cos, sin = self.rope(coords)
+        x = self.run_blocks(x, cos, sin, None, cache)
+        return self.predict_from(x)
+
+    def push_action(self, action, coords, cache):
+        """Commit an action token's keys and values to the cache."""
+        x = self.action_embedding(action)
+        x = x + self.type_embedding(
+            torch.ones(1, dtype=torch.long, device=x.device))
+        cos, sin = self.rope(coords)
+        self.run_blocks(x, cos, sin, None, cache)

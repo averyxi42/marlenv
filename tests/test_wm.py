@@ -464,3 +464,126 @@ def test_player_keeps_actions_aligned_with_frames_through_eviction():
         player.step(Direction.UP)
         assert len(player.actions) == player.history.shape[1] - 1
     assert player.history.shape[1] == 5
+
+
+# ------------------------------------------------------- cache and windowing
+def cached_prefix(model, frames, actions, window=None, upto=None):
+    """Build a cache over a prefix, the way the runner does."""
+    from marlenv.wm.runner import CachedRunner
+
+    steps = upto if upto is not None else frames.shape[1] - 1
+    runner = CachedRunner(model, window=window, device='cpu')
+    runner.reset(frames[:, :1])
+    for step in range(steps):
+        runner._commit_action(actions[0, step])
+        runner._advance(actions[0, step])
+        runner.time += 1
+        runner.cache.trim(None if window is None else window - 1)
+        if step < steps - 1:
+            runner._commit_frame(frames[:, step + 1:step + 2])
+    return runner
+
+
+@pytest.mark.parametrize('window', [None, 3, 5])
+def test_cached_path_equals_the_full_forward(window):
+    """The fast path must be the same computation, not merely similar."""
+    torch.manual_seed(0)
+    model = WorldModel(num_actions=4, frame='world', dim=64, depth=3,
+                       heads=4).eval()
+    steps = 7
+    frames = torch.randn(1, steps, 9, 9, 3).clamp(-1, 1)
+    actions = torch.randint(0, 4, (1, steps - 1))
+
+    tau = torch.zeros(1, steps)
+    tau[0, -1] = 1.0
+    with torch.no_grad():
+        full = model(frames, actions, tau, window=window)[:, -1]
+
+    runner = cached_prefix(model, frames, actions, window)
+    coords = runner._patch_coords(runner.time, runner.displacement,
+                                  runner.heading)
+    with torch.no_grad():
+        cached = model.forward_cached(frames[:, -1:], torch.ones(1, 1),
+                                      coords, runner.cache)[:, 0]
+
+    assert torch.allclose(full[0], cached[0], atol=1e-4)
+
+
+def test_cache_trims_whole_frames():
+    """A frame's patches and the action after it must stay together."""
+    from marlenv.wm.cache import KVCache
+
+    cache = KVCache(layers=1, tokens_per_frame=9)
+    cache.recording = True
+    for _ in range(6):
+        cache.extend(0, torch.zeros(1, 2, 10, 8), torch.zeros(1, 2, 10, 8))
+        cache.frames += 1
+
+    assert len(cache) == 60
+    dropped = cache.trim(4)
+    assert dropped == 2
+    assert cache.frames == 4
+    assert len(cache) == 40
+
+
+def test_spatial_coordinates_stay_consistent_at_long_context():
+    """Length generalisation rests on this: the invariant is unconditional."""
+    for steps in (24, 48, 120):
+        model = WorldModel(num_actions=4, frame='world', dim=64, depth=1,
+                           heads=4)
+        torch.manual_seed(0)
+        actions = torch.randint(0, 4, (1, steps - 1))
+        coords = model.token_coords(steps, 'cpu', actions)[0]
+        displacement, _ = model.trajectory(actions)
+        offsets = model.patch_offsets('cpu')
+
+        seen = {}
+        index = 0
+        for step in range(steps):
+            shift = displacement[0, step]
+            for k in range(model.tokens_per_frame):
+                cell = (int(offsets[k, 0] + shift[0]),
+                        int(offsets[k, 1] + shift[1]))
+                code = tuple(int(v) for v in coords[index, 1:])
+                if cell in seen:
+                    assert seen[cell] == code, f'{steps}: {cell} moved'
+                seen[cell] = code
+                index += 1
+            if step < steps - 1:
+                index += 1
+
+
+def test_relative_offsets_stay_bounded_as_the_sequence_grows():
+    """Attention only ever sees offsets within a window, so they stay small.
+
+    This is why a window longer than the trained one is coherent: the
+    coordinates grow, but the differences attention reads do not.
+    """
+    spans = []
+    for steps in (24, 200):
+        model = WorldModel(num_actions=4, frame='world', dim=64, depth=1,
+                           heads=4)
+        torch.manual_seed(0)
+        actions = torch.randint(0, 4, (1, steps - 1))
+        coords = model.token_coords(steps, 'cpu', actions)[0]
+        types = model.token_types(steps, 'cpu')
+        window = coords[types == 0][-24 * model.tokens_per_frame:, 1:]
+        spans.append(int((window.max(0).values - window.min(0).values).max()))
+
+    assert max(spans) < 30, spans
+    assert abs(spans[0] - spans[1]) <= 6, spans
+
+
+def test_masks_agree_between_backends():
+    from marlenv.wm.attention import dense_mask, mask_predicate
+
+    time = torch.tensor([0, 0, 1, 1, 2, 2])
+    is_action = torch.tensor([0, 1, 0, 1, 0, 0]).bool()
+    dense = dense_mask(time, is_action, window=2)[0, 0]
+    predicate = mask_predicate(time, is_action, window=2)
+
+    for q in range(6):
+        for kv in range(6):
+            assert bool(dense[q, kv]) == bool(
+                predicate(torch.tensor(0), torch.tensor(0),
+                          torch.tensor(q), torch.tensor(kv)))
