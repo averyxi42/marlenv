@@ -9,13 +9,26 @@ Marlenv is an ongoing project and modifications and new environments are expecte
 
 ## Installation
 
-clone marlenv repo and use pip to install
+Three commands, from a clone of the repository:
 
 ```bash
-git clone https://github.com/kc-ml2/marlenv.git
-cd marlenv
+conda create -n marlenv python=3.12 -y
+conda activate marlenv
 pip install -e .
 ```
+
+That brings up everything the example scripts need -- the environment, the
+search policies, the world models, and the data pipeline -- because they
+are the project rather than optional extras. `pip install -e '.[dev]'`
+adds pytest if you want to run the suite.
+
+The torch wheel pip resolves is the default one for your platform. On a
+machine with a GPU you may want a build matched to your CUDA version
+instead; install that first, from https://pytorch.org, and the line above
+will leave it alone.
+
+Developed against Python 3.14 and torch 2.11; 3.12 is the safer default if
+you have no reason to prefer another.
 
 ## Rules
 

@@ -110,6 +110,9 @@ logs/
 saved_models
 .DS_Store
 *.gif
+# the showcase is documentation: those recordings are meant to be
+# looked at, so they are kept even though everything else gif is not
+!showcase/*.gif
 tmp/
 
 # pickle files and pt files (for now)

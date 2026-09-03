@@ -18,7 +18,16 @@ setup(
         'gymnasium>=1.0',
         'numpy>=1.21',
         'Pillow>=9.0.1',
+        # the world models, the search policies, and the data pipeline are
+        # part of the project rather than optional extras, so a single
+        # install brings up everything the example scripts need
+        'torch>=2.0',
+        'datasets>=2.14',
+        'pygame-ce>=2.4',
     ],
-    python_requires='>=3.8',
+    extras_require={
+        'dev': ['pytest>=7.0'],
+    },
+    python_requires='>=3.9',
 
 )
