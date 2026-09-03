@@ -66,16 +66,32 @@ def episode_sequence(episode):
     return observations, actions[:-1], alive, trained, positions
 
 
-def build_multi_sequences(datasets, limit=None):
-    """Padded arrays over one or more HuggingFace datasets."""
+def build_multi_sequences(datasets, limit=None, action_weights=None,
+                          action_dropouts=None):
+    """Padded arrays over one or more HuggingFace datasets.
+
+    Each dataset carries its own action weight and dropout rate, recorded
+    per episode. Every component is worth all of its frames -- the dynamics
+    are the same whoever is driving -- but not all of its actions: an
+    exploration episode's actions are partly noise by construction, and
+    asking the policy head to fit noise is what gives the action term a
+    floor it can never reach while it goes on pulling the shared trunk.
+    Weighting per component says that once, at the source.
+    """
     from marlenv.data import decode_episode
 
-    rows = []
-    for dataset in datasets:
+    rows, weights, drops = [], [], []
+    for index, dataset in enumerate(datasets):
+        weight = 1.0 if action_weights is None else float(
+            action_weights[index])
+        drop = 0.0 if action_dropouts is None else float(
+            action_dropouts[index])
         for row in dataset:
             if limit is not None and len(rows) >= limit:
                 break
             rows.append(episode_sequence(decode_episode(row)))
+            weights.append(weight)
+            drops.append(drop)
     if not rows:
         raise ValueError('no episodes')
 
@@ -90,6 +106,8 @@ def build_multi_sequences(datasets, limit=None):
     trained = np.zeros((count, length, agents), bool)
     mask = np.zeros((count, length), bool)
     positions = np.zeros((count, length, agents, 2), np.int64)
+    action_weight = np.array(weights, dtype=np.float32)
+    action_dropout = np.array(drops, dtype=np.float32)
 
     for index, (obs, act, liv, tra, pos) in enumerate(rows):
         steps = min(len(obs), length)
@@ -104,4 +122,6 @@ def build_multi_sequences(datasets, limit=None):
         positions[index, steps:] = pos[steps - 1]
 
     return {'observations': observations, 'actions': actions, 'alive': alive,
-            'trained': trained, 'mask': mask, 'positions': positions}
+            'trained': trained, 'mask': mask, 'positions': positions,
+            'action_weight': action_weight,
+            'action_dropout': action_dropout}

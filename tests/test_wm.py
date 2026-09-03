@@ -1079,7 +1079,9 @@ def _pack(episode):
     obs, act, live, trained, positions = episode_sequence(episode)
     return {'observations': obs[None], 'actions': act[None],
             'alive': live[None], 'trained': trained[None],
-            'mask': np.ones((1, len(obs)), bool), 'positions': positions[None]}
+            'mask': np.ones((1, len(obs)), bool), 'positions': positions[None],
+            'action_weight': np.ones(1, np.float32),
+            'action_dropout': np.zeros(1, np.float32)}
 
 
 def test_crop_origins_follow_the_crop_not_the_episode():
@@ -1093,7 +1095,7 @@ def test_crop_origins_follow_the_crop_not_the_episode():
 
     sequences = _pack(_diverging_episode())
     batcher = MultiBatcher(sequences, context=3, seed=0)
-    frames, _, _, _, origins = batcher.batch(12)
+    frames, _, _, _, origins, _, _ = batcher.batch(12)
 
     positions = sequences['positions'][0]
     for row in range(frames.shape[0]):

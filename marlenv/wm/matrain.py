@@ -14,8 +14,26 @@ from marlenv.wm.multiagent import actions_to_signal
 
 
 def multi_training_loss(model, frames, actions, alive, trained, origins,
-                        action_weight=1.0, generator=None):
-    """Masked v-loss over frames and actions together."""
+                        action_weight=None, action_dropout=None,
+                        generator=None):
+    """Masked v-loss over frames and actions together.
+
+    ``action_weight`` and ``action_dropout`` are different knobs, not two
+    ways of saying the same thing. The loss is a mean over the tokens that
+    contribute, so dropout leaves its expectation alone -- it decides
+    *which* tokens speak, resampled every step, which points the pull
+    somewhere different each time rather than the same way always. The
+    weight decides how loudly, and is the only one of the two that changes
+    how hard the action term pulls.
+
+    Both are per episode, so a component can be kept for its frames while
+    its actions are held back. That matters because the action term is much
+    the larger claim on the shared trunk and stops being able to spend it
+    early: the policy has an entropy floor, and exploration episodes put it
+    there by construction, after which it goes on injecting an irreducible
+    gradient that frame prediction has to compete with for the rest of the
+    run.
+    """
     batch, steps, agents = frames.shape[:3]
     device = frames.device
 
@@ -64,11 +82,26 @@ def multi_training_loss(model, frames, actions, alive, trained, origins,
 
     action_error = ((predicted_actions - action_target) ** 2).mean(dim=-1)
     # only train an action the agent was alive to take
-    weights = action_mask.float()
-    action_loss = ((action_error * weights).sum()
-                   / weights.sum().clamp(min=1))
+    # dropout decides which action tokens speak this step, the weight
+    # decides how loudly. Both are per episode, so a component can be kept
+    # for its frames while its actions are held back or silenced
+    contributing = action_mask.float()
+    if action_dropout is not None:
+        rate = action_dropout.view(-1, 1, 1)
+        keep = torch.rand(contributing.shape, device=device,
+                          generator=generator) >= rate
+        contributing = contributing * keep.float()
+    total = contributing.sum().clamp(min=1)
 
-    return frame_loss + action_weight * action_loss, frame_loss, action_loss
+    # reported unweighted, so the log shows how the policy is actually
+    # doing rather than how hard it is being asked to pull
+    action_loss = (action_error * contributing).sum() / total
+    if action_weight is None:
+        pull = action_loss
+    else:
+        pull = ((action_error * contributing
+                 * action_weight.view(-1, 1, 1)).sum() / total)
+    return frame_loss + pull, frame_loss, action_loss
 
 
 class MultiBatcher:
@@ -93,6 +126,8 @@ class MultiBatcher:
         alive = np.zeros((size, context, agents), bool)
         trained = np.zeros((size, context, agents), bool)
         origins = np.zeros((size, agents, 2), np.int64)
+        weight = np.zeros(size, np.float32)
+        dropout = np.zeros(size, np.float32)
 
         for row, index in enumerate(picks):
             length = int(self.lengths[index])
@@ -111,7 +146,9 @@ class MultiBatcher:
             # exactly the registration the shared coordinates depend on
             here = self.data['positions'][index, start]
             origins[row] = here - here[0]
+            weight[row] = self.data['action_weight'][index]
+            dropout[row] = self.data['action_dropout'][index]
 
         to = lambda x: torch.from_numpy(x).to(self.device)
         return (to(to_model_input(frames)), to(actions), to(alive),
-                to(trained), to(origins))
+                to(trained), to(origins), to(weight), to(dropout))

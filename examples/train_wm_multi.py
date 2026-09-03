@@ -33,7 +33,18 @@ def parse_args():
     p.add_argument('--dim', type=int, default=256)
     p.add_argument('--depth', type=int, default=6)
     p.add_argument('--heads', type=int, default=8)
-    p.add_argument('--action-weight', type=float, default=1.0)
+    p.add_argument('--action-weight', type=float, nargs='+', default=[1.0],
+                   help='how hard the action term pulls on the shared '
+                        'trunk; at 1.0 four action components weigh as '
+                        'much as 243 frame pixels. One value, or one per '
+                        'component')
+    p.add_argument('--action-dropout', type=float, nargs='+', default=[0.0],
+                   help='fraction of each component\'s action tokens left '
+                        'out of the loss each step. One value, or one per '
+                        'component')
+    p.add_argument('--init', default=None,
+                   help='warm start from a checkpoint, to carry on rather '
+                        'than begin again')
     p.add_argument('--log-every', type=int, default=500)
     p.add_argument('--checkpoint-every', type=int, default=2000)
     p.add_argument('--device', default=None)
@@ -64,10 +75,47 @@ def evaluate(model, batcher, batch_size, batches=6, seed=1234):
     return totals / batches
 
 
+def spread(values, count, flag):
+    """One value for every component, from one given or one each."""
+    if len(values) == 1:
+        return [values[0]] * count
+    if len(values) != count:
+        raise SystemExit(f'{flag} takes one value or one per component')
+    return list(values)
+
+
+def trunk_pull(model, batcher, args):
+    """Gradient each loss term puts into the shared trunk.
+
+    The two terms compete for one trunk, and the loss values alone do not
+    say who is winning -- the action term can sit at its floor and still
+    dominate. Logged so the balance is visible while it runs.
+    """
+    trunk = [p for name, p in model.named_parameters()
+             if name.startswith('blocks') or name.startswith('to_tokens')]
+
+    def norm(term):
+        model.zero_grad(set_to_none=True)
+        term.backward(retain_graph=True)
+        total = sum((p.grad ** 2).sum() for p in trunk if p.grad is not None)
+        return float(total.sqrt())
+
+    batch = batcher.batch(args.batch_size)
+    total, frame_loss, _ = multi_training_loss(model, *batch)
+    pull = norm(frame_loss), norm(total - frame_loss)
+    model.zero_grad(set_to_none=True)
+    return pull
+
+
 def main():
     args = parse_args()
     torch.manual_seed(args.seed)
     device = args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
+
+    weights = spread(args.action_weight, len(args.components),
+                     '--action-weight')
+    dropouts = spread(args.action_dropout, len(args.components),
+                      '--action-dropout')
 
     datasets = []
     for name in args.components:
@@ -76,9 +124,12 @@ def main():
             dataset = dataset.select(
                 range(min(args.episodes_per_component, len(dataset))))
         datasets.append(dataset)
-        print(f'  {name}: {len(dataset)} episodes')
+        print(f'  {name}: {len(dataset)} episodes  '
+              f'action weight {weights[len(datasets) - 1]:g}  '
+              f'dropout {dropouts[len(datasets) - 1]:g}')
 
-    sequences = build_multi_sequences(datasets)
+    sequences = build_multi_sequences(datasets, action_weights=weights,
+                                      action_dropouts=dropouts)
     train_set, val_set = split(sequences, args.val_fraction, args.seed)
     agents = sequences['observations'].shape[2]
     print(f'  {len(sequences["observations"])} episodes, {agents} agents, '
@@ -93,6 +144,10 @@ def main():
         num_agents=agents, view=sequences['observations'].shape[3],
         num_actions=4, frame='world', dim=args.dim, depth=args.depth,
         heads=args.heads).to(device)
+    if args.init:
+        model.load_state_dict(torch.load(args.init, map_location='cpu',
+                                         weights_only=False)['model'])
+        print(f'  warm started from {args.init}')
     params = sum(p.numel() for p in model.parameters())
     print(f'device={device}  params={params / 1e6:.2f}M  agents={agents}  '
           f'context={args.context}  '
@@ -108,8 +163,7 @@ def main():
     history, window, start = [], [], time.time()
     for step in range(args.steps):
         loss, frame_loss, action_loss = multi_training_loss(
-            model, *batcher.batch(args.batch_size),
-            action_weight=args.action_weight)
+            model, *batcher.batch(args.batch_size))
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -120,9 +174,11 @@ def main():
         if (step + 1) % args.log_every == 0:
             mean = np.mean(window, axis=0)
             val = evaluate(model, validation, args.batch_size)
+            pull = trunk_pull(model, batcher, args)
             record = {'step': step + 1, 'loss': mean[0], 'frame': mean[1],
                       'action': mean[2], 'val_loss': val[0],
                       'val_frame': val[1], 'val_action': val[2],
+                      'grad_frame': pull[0], 'grad_action': pull[1],
                       'elapsed': round(time.time() - start, 1)}
             history.append(record)
             window = []
@@ -130,6 +186,7 @@ def main():
                   f'frame {record["frame"]:.4f}  action {record["action"]:.4f}'
                   f'   val {record["val_loss"]:.4f} '
                   f'(f {record["val_frame"]:.4f} a {record["val_action"]:.4f})'
+                  f'   pull a/f {pull[1] / max(pull[0], 1e-9):.2f}x'
                   f'  {record["elapsed"]:.0f}s', flush=True)
 
         if (step + 1) % args.checkpoint_every == 0 or step + 1 == args.steps:
