@@ -84,6 +84,9 @@ class SnakeEnv(gym.Env):
         # RGB observation noise, bound to cells and to body position so it
         # is fixed for the episode rather than resampled per frame
         self.observation_noise = kwargs.pop('observation_noise', 0.0)
+        # snake noise sits on saturated colours rather than dark cells, so
+        # it takes its own sigma; None follows observation_noise
+        self.snake_noise_sigma = kwargs.pop('snake_noise_sigma', None)
         self.noise_period = kwargs.pop('noise_period', 8)
         self.obs_noise = None
 
@@ -176,10 +179,12 @@ class SnakeEnv(gym.Env):
         # Drawn from a spawned child stream, which leaves the env's own
         # generator untouched: an episode plays out identically whether or
         # not noise is enabled, so noisy and clean renders are paired
-        if self.observation_noise:
+        if self.observation_noise or self.snake_noise_sigma:
             self.obs_noise = ObservationNoise(
                 self.grid_shape, self.num_snakes,
-                sigma=self.observation_noise, period=self.noise_period,
+                sigma=self.observation_noise,
+                snake_sigma=self.snake_noise_sigma,
+                period=self.noise_period,
                 pad=self.view_radius or 0,
                 np_random=self.np_random.spawn(1)[0])
 

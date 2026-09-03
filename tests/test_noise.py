@@ -159,3 +159,43 @@ def test_noise_is_off_by_default():
     assert env.unwrapped.obs_noise is None
     frame = env.unwrapped.render('rgb_array')
     assert len(np.unique(frame.reshape(-1, 3), axis=0)) <= 6
+
+
+def _snake_cell_colours(base, snake_idx=0):
+    frame = base.render('rgb_array')
+    return {tuple(frame[coord]) for coord in base.snakes[snake_idx].coords}
+
+
+def _background_colours(base):
+    frame = base.render('rgb_array')
+    empty = base.grid == Cell.EMPTY.value
+    return {tuple(c) for c in frame[empty]}
+
+
+def test_background_and_snake_sigmas_are_independent():
+    """Each field can be scaled, or switched off, without the other."""
+    quiet_snakes = gym.make('Snake-v1', height=13, width=13, num_snakes=2,
+                            observation_noise=10.0, snake_noise_sigma=0.0,
+                            disable_env_checker=True)
+    quiet_snakes.reset(seed=0)
+    base = quiet_snakes.unwrapped
+    assert len(_snake_cell_colours(base)) == 1, 'snake noise leaked in'
+    assert len(_background_colours(base)) > 5
+
+    quiet_background = gym.make('Snake-v1', height=13, width=13, num_snakes=2,
+                                observation_noise=0.0, snake_noise_sigma=25.0,
+                                disable_env_checker=True)
+    quiet_background.reset(seed=0)
+    base = quiet_background.unwrapped
+    assert len(_background_colours(base)) == 1, 'background noise leaked in'
+    assert len(_snake_cell_colours(base)) > 1
+
+
+def test_snake_sigma_defaults_to_the_background_sigma():
+    env = gym.make('Snake-v1', height=13, width=13, num_snakes=2,
+                   observation_noise=7.0, disable_env_checker=True)
+    env.reset(seed=0)
+
+    noise = env.unwrapped.obs_noise
+    assert noise.sigma == 7.0
+    assert noise.snake_sigma == 7.0

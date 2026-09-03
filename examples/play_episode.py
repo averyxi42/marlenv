@@ -64,9 +64,12 @@ def parse_args():
                         'gif tiling every agent\'s own view')
     p.add_argument('--tile-scale', type=int, default=12,
                    help='pixels per cell in the tiled observation gif')
-    p.add_argument('--observation-noise', type=float, default=5.0,
+    p.add_argument('--observation-noise', type=float, default=2.0,
                    help='sigma of the bound RGB observation noise '
                         '(classic style; 0 disables)')
+    p.add_argument('--snake-noise', type=float, default=8.0,
+                   help='sigma of the per-snake noise; defaults to '
+                        '--observation-noise')
     p.add_argument('--noise-period', type=int, default=3,
                    help='body-distance period of the per-snake noise')
     p.add_argument('--obstacle-density', type=float, default=0.0,
@@ -181,6 +184,7 @@ def main():
         cell_size=args.cell_size,
         view_radius=args.view_radius,
         observation_noise=args.observation_noise,
+        snake_noise_sigma=args.snake_noise,
         noise_period=args.noise_period,
         obstacle_density=args.obstacle_density,
         grid_size_range=(tuple(args.grid_size_range)

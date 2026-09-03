@@ -25,6 +25,10 @@ def env():
 
 @pytest.fixture
 def evaluator():
+    # torch's global RNG is seeded from OS entropy at import, so without
+    # this the network's weights -- and every search that consults them --
+    # differ from session to session, making these tests flaky
+    torch.manual_seed(0)
     return NetworkEvaluator(SnakeNet(channels=8, blocks=1, hidden=16),
                             device='cpu')
 

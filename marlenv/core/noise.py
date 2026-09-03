@@ -25,10 +25,14 @@ import numpy as np
 class ObservationNoise:
     """Fixed noise fields for one episode's RGB observations."""
 
-    def __init__(self, grid_shape, num_snakes, sigma=2.0, period=8,
-                 pad=0, np_random=None):
+    def __init__(self, grid_shape, num_snakes, sigma=2.0, snake_sigma=None,
+                 period=8, pad=0, np_random=None):
         rng = np_random if np_random is not None else np.random.default_rng()
         self.sigma = float(sigma)
+        # the two fields are read against very different backdrops -- flat
+        # dark cells versus saturated snake colours -- so they take separate
+        # scales; snake_sigma=None just follows the background
+        self.snake_sigma = float(sigma if snake_sigma is None else snake_sigma)
         self.period = int(period)
         # sized to the padded board, so free space outside the grid carries
         # the same persistent noise as cells inside it
@@ -38,7 +42,7 @@ class ObservationNoise:
         self.cell_noise = rng.normal(
             0.0, self.sigma, size=shape).astype(np.float32)
         self.snake_noise = rng.normal(
-            0.0, self.sigma,
+            0.0, self.snake_sigma,
             size=(num_snakes, self.period, 3)).astype(np.float32)
 
     def apply(self, rgb, snakes, pad=0):
