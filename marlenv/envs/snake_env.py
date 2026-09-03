@@ -12,8 +12,9 @@ from gymnasium.utils import seeding
 
 from marlenv.core.grid_util import (
     random_empty_coords, draw, make_grid, dfs_sweep_empty,
-    rgb_from_grid, image_from_grid, add_obstacles,
+    rgb_from_grid, image_from_grid, image_from_rgb, add_obstacles,
     MEAN_OBSTACLE_AREA)
+from marlenv.core.noise import ObservationNoise
 from marlenv.core.render import draw_frame, image_from_env
 from marlenv.core.snake import Direction, Snake, Cell, CellColors
 from marlenv.envs.constants import FEATURE_CHANNEL, RGB_CHANNEL
@@ -79,6 +80,12 @@ class SnakeEnv(gym.Env):
 
         # procedural layout. Both default to off, so an env constructed the
         # old way still gets a fixed, empty board.
+        # RGB observation noise, bound to cells and to body position so it
+        # is fixed for the episode rather than resampled per frame
+        self.observation_noise = kwargs.pop('observation_noise', 0.0)
+        self.noise_period = kwargs.pop('noise_period', 8)
+        self.obs_noise = None
+
         self.grid_size_range = kwargs.pop('grid_size_range', None)
         # obstacle_density is the fraction of interior cells walled off;
         # num_obstacles overrides it with an exact piece count
@@ -159,6 +166,15 @@ class SnakeEnv(gym.Env):
         self.frame_buffer = []
 
         obs = self._init_obs()
+
+        # Drawn from a spawned child stream, which leaves the env's own
+        # generator untouched: an episode plays out identically whether or
+        # not noise is enabled, so noisy and clean renders are paired
+        if self.observation_noise:
+            self.obs_noise = ObservationNoise(
+                self.grid_shape, self.num_snakes,
+                sigma=self.observation_noise, period=self.noise_period,
+                np_random=self.np_random.spawn(1)[0])
 
         # Episodic stats
         self._reset_epi_stats()
@@ -246,16 +262,22 @@ class SnakeEnv(gym.Env):
                 game_frame = image_from_env(self.grid, self.snakes,
                                             self.cell_size)
             else:
-                game_frame = image_from_grid(self.grid, Cell, CellColors)
+                game_frame = image_from_rgb(self._classic_rgb())
             self.frame_buffer.append(game_frame)
         elif mode == 'rgb_array':
             if style == 'pixel':
                 return draw_frame(self.grid, self.snakes, self.cell_size)
-            rgb_array = rgb_from_grid(self.grid, Cell, CellColors)
-            return rgb_array
+            return self._classic_rgb()
         elif mode == 'human':
             # Run pygame
             pass
+
+    def _classic_rgb(self):
+        """One pixel per cell, plus this episode's bound noise if enabled."""
+        rgb_array = rgb_from_grid(self.grid, Cell, CellColors)
+        if self.obs_noise is not None:
+            rgb_array = self.obs_noise.apply(rgb_array, self.snakes)
+        return rgb_array
 
     def close(self):
         pass

@@ -59,6 +59,11 @@ def parse_args():
     p.add_argument('--device', default=None)
     p.add_argument('--num-snakes', type=int, default=3)
     p.add_argument('--num-fruits', type=int, default=4)
+    p.add_argument('--observation-noise', type=float, default=5.0,
+                   help='sigma of the bound RGB observation noise '
+                        '(classic style; 0 disables)')
+    p.add_argument('--noise-period', type=int, default=3,
+                   help='body-distance period of the per-snake noise')
     p.add_argument('--obstacle-density', type=float, default=0.0,
                    help='fraction of interior cells walled off')
     p.add_argument('--grid-size-range', type=int, nargs=2, default=None,
@@ -149,6 +154,8 @@ def main():
         reward_dict=REWARD_DICT,
         render_style=args.style,
         cell_size=args.cell_size,
+        observation_noise=args.observation_noise,
+        noise_period=args.noise_period,
         obstacle_density=args.obstacle_density,
         grid_size_range=(tuple(args.grid_size_range)
                          if args.grid_size_range else None),
