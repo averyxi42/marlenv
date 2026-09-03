@@ -44,7 +44,9 @@ def parse_args():
                         'component')
     p.add_argument('--init', default=None,
                    help='warm start from a checkpoint, to carry on rather '
-                        'than begin again')
+                        'than begin again. A deeper --depth grafts: each '
+                        'trained block is followed by a silenced copy of '
+                        'itself, so step zero computes what it did before')
     p.add_argument('--log-every', type=int, default=500)
     p.add_argument('--checkpoint-every', type=int, default=2000)
     p.add_argument('--device', default=None)
@@ -145,9 +147,14 @@ def main():
         num_actions=4, frame='world', dim=args.dim, depth=args.depth,
         heads=args.heads).to(device)
     if args.init:
-        model.load_state_dict(torch.load(args.init, map_location='cpu',
-                                         weights_only=False)['model'])
-        print(f'  warm started from {args.init}')
+        from marlenv.wm.graft import graft_depth
+        saved = torch.load(args.init, map_location='cpu',
+                           weights_only=False)
+        silenced = graft_depth(model, saved['model'])
+        note = (f' as {saved.get("depth", "?")} blocks grown to '
+                f'{args.depth}, {silenced} silenced duplicates'
+                if silenced else '')
+        print(f'  warm started from {args.init}{note}')
     params = sum(p.numel() for p in model.parameters())
     print(f'device={device}  params={params / 1e6:.2f}M  agents={agents}  '
           f'context={args.context}  '

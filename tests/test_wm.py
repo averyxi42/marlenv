@@ -1142,3 +1142,65 @@ def test_the_action_that_kills_is_still_trained():
     assert (alive[:, :-1] & fatal).all() == fatal.all()
     # the mask the loss uses must cover it
     assert alive[:, :-1][fatal].all()
+
+
+def test_grafting_depth_preserves_the_function():
+    """A silenced duplicate is a block the network behaves as if it lacked.
+
+    The point of grafting is that step zero of the deeper run computes
+    exactly what the shallower model computed, so nothing already learnt is
+    thrown away.
+    """
+    from marlenv.wm.graft import graft_depth, preserves
+    from marlenv.wm.multiagent import MultiAgentWorldModel, actions_to_signal
+
+    torch.manual_seed(0)
+    shallow = MultiAgentWorldModel(num_agents=2, view=9, num_actions=4,
+                                   frame='world', dim=64, depth=3, heads=4)
+    deep = MultiAgentWorldModel(num_agents=2, view=9, num_actions=4,
+                                frame='world', dim=64, depth=6, heads=4)
+    silenced = graft_depth(deep, shallow.state_dict())
+    assert silenced == 3, 'one duplicate per trained block'
+
+    frames = torch.randn(1, 4, 2, 9, 9, 3).clamp(-1, 1)
+    actions = torch.randint(0, 4, (1, 3, 2))
+    signal = actions_to_signal(actions, 4)
+    tau = torch.rand(1, 4, 2)
+    action_tau = torch.rand(1, 3, 2)
+    origins = torch.zeros(1, 2, 2, dtype=torch.long)
+
+    assert preserves(shallow, deep, frames, signal, tau, action_tau,
+                     origins=origins, action_indices=actions)
+
+
+def test_a_silenced_block_keeps_its_insides():
+    """Only the outputs are zeroed, so the copy has real features to use."""
+    from marlenv.wm.graft import graft_depth
+    from marlenv.wm.multiagent import MultiAgentWorldModel
+
+    torch.manual_seed(0)
+    shallow = MultiAgentWorldModel(num_agents=2, view=9, num_actions=4,
+                                   frame='world', dim=64, depth=2, heads=4)
+    deep = MultiAgentWorldModel(num_agents=2, view=9, num_actions=4,
+                                frame='world', dim=64, depth=4, heads=4)
+    graft_depth(deep, shallow.state_dict())
+
+    original, duplicate = deep.blocks[0], deep.blocks[1]
+    assert not duplicate.attn.out.weight.any(), 'attention still writes'
+    assert not duplicate.mlp[2].weight.any(), 'mlp still writes'
+    assert not duplicate.mlp[2].bias.any(), 'a bias is not inert'
+    # the insides are the trained ones, not a fresh initialisation
+    assert torch.equal(duplicate.attn.qkv.weight, original.attn.qkv.weight)
+    assert torch.equal(duplicate.mlp[0].weight, original.mlp[0].weight)
+
+
+def test_grafting_refuses_a_depth_it_cannot_interleave():
+    from marlenv.wm.graft import graft_depth
+    from marlenv.wm.multiagent import MultiAgentWorldModel
+
+    shallow = MultiAgentWorldModel(num_agents=2, view=9, num_actions=4,
+                                   frame='world', dim=64, depth=4, heads=4)
+    deep = MultiAgentWorldModel(num_agents=2, view=9, num_actions=4,
+                                frame='world', dim=64, depth=6, heads=4)
+    with pytest.raises(ValueError, match='whole multiple'):
+        graft_depth(deep, shallow.state_dict())
