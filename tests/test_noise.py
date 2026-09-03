@@ -65,6 +65,44 @@ def test_static_cells_never_flicker(env):
             break
 
 
+def test_texture_does_not_drift_along_the_body():
+    """The colour sequence read head-to-tail must be the same every step.
+
+    Path distance from the head is a *material* coordinate: the body slides
+    along its own path, so a material element keeps its distance from the
+    head and therefore its colour. Keying the noise to anything fixed in
+    world space instead would make the pattern shift along the body each
+    step, i.e. paint a trail rather than scales.
+    """
+    env = gym.make('Snake-v1', height=13, width=13, num_snakes=1,
+                   num_fruits=3, observation_noise=SIGMA, noise_period=4,
+                   disable_env_checker=True)
+    env.reset(seed=2)
+    env.action_space.seed(2)
+    base = env.unwrapped
+
+    def along_body():
+        frame = base.render('rgb_array')
+        return [tuple(frame[coord]) for coord in base.snakes[0].coords]
+
+    reference = along_body()
+    steps = 0
+    for _ in range(20):
+        _, _, term, trunc, _ = env.step(list(env.action_space.sample()))
+        if not base.snakes[0].alive:
+            break
+        current = along_body()
+        shared = min(len(reference), len(current))
+        assert current[:shared] == reference[:shared], \
+            'texture drifted along the body'
+        reference = current
+        steps += 1
+        if all(term) or all(trunc):
+            break
+
+    assert steps > 5, 'test never followed enough steps'
+
+
 def test_snake_noise_repeats_with_the_body_period():
     """Body cells are indexed by distance from the head, modulo the period."""
     period = 3
