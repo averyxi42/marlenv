@@ -28,25 +28,33 @@ def alpha_sigma(tau):
     return alpha_bar.sqrt(), (1 - alpha_bar).sqrt()
 
 
-def add_noise(frames, tau, noise):
-    """``(b, t, v, v, c)`` frames noised at a per-frame level."""
+def _broadcast(tau, like):
+    """Shape a per-item noise level to broadcast against its data.
+
+    Frames carry three trailing dimensions and action vectors one, so the
+    padding is derived rather than assumed; hard-coding it silently mixed
+    the two up.
+    """
     alpha, sigma = alpha_sigma(tau)
-    shape = (*tau.shape, 1, 1, 1)
-    return alpha.view(shape) * frames + sigma.view(shape) * noise
+    shape = (*tau.shape, *([1] * (like.dim() - tau.dim())))
+    return alpha.view(shape), sigma.view(shape)
 
 
-def to_velocity(frames, noise, tau):
-    """The v target: ``alpha * noise - sigma * frames``."""
-    alpha, sigma = alpha_sigma(tau)
-    shape = (*tau.shape, 1, 1, 1)
-    return alpha.view(shape) * noise - sigma.view(shape) * frames
+def add_noise(clean, tau, noise):
+    """Noise data at a per-item level; ``tau`` leads its shape."""
+    alpha, sigma = _broadcast(tau, clean)
+    return alpha * clean + sigma * noise
+
+
+def to_velocity(clean, noise, tau):
+    """The v target: ``alpha * noise - sigma * clean``."""
+    alpha, sigma = _broadcast(tau, clean)
+    return alpha * noise - sigma * clean
 
 
 def from_velocity(noisy, velocity, tau):
     """Recover ``(clean, noise)`` from a predicted velocity."""
-    alpha, sigma = alpha_sigma(tau)
-    shape = (*tau.shape, 1, 1, 1)
-    alpha, sigma = alpha.view(shape), sigma.view(shape)
+    alpha, sigma = _broadcast(tau, noisy)
     clean = alpha * noisy - sigma * velocity
     noise = sigma * noisy + alpha * velocity
     return clean, noise

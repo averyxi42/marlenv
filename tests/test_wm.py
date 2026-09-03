@@ -587,3 +587,122 @@ def test_masks_agree_between_backends():
             assert bool(dense[q, kv]) == bool(
                 predicate(torch.tensor(0), torch.tensor(0),
                           torch.tensor(q), torch.tensor(kv)))
+
+
+# ----------------------------------------------------------- multi-agent
+def multi_model(agents=3, **kwargs):
+    from marlenv.wm.multiagent import MultiAgentWorldModel
+    torch.manual_seed(0)
+    settings = dict(num_actions=4, frame='world', dim=64, depth=3, heads=4)
+    settings.update(kwargs)
+    return MultiAgentWorldModel(num_agents=agents, **settings).eval()
+
+
+def multi_inputs(agents=3, steps=5, seed=0):
+    from marlenv.wm.multiagent import actions_to_signal
+    torch.manual_seed(seed)
+    frames = torch.randn(1, steps, agents, 9, 9, 3)
+    indices = torch.randint(0, 4, (1, steps - 1, agents))
+    origins = torch.tensor([[[0, 0], [4, 3], [-3, 5]][:agents]])
+    return (frames, actions_to_signal(indices, 4), indices, origins,
+            torch.rand(1, steps, agents), torch.rand(1, steps - 1, agents))
+
+
+def test_agents_are_permutation_equivariant():
+    """Identity comes from position, so reordering agents just reorders."""
+    model = multi_model()
+    frames, signal, indices, origins, ftau, atau = multi_inputs()
+    order = [2, 0, 1]
+
+    with torch.no_grad():
+        base_f, base_a = model(frames, signal, ftau, atau, origins=origins,
+                               action_indices=indices)
+        swap_f, swap_a = model(frames[:, :, order], signal[:, :, order],
+                               ftau[:, :, order], atau[:, :, order],
+                               origins=origins[:, order],
+                               action_indices=indices[:, :, order])
+
+    assert torch.allclose(swap_f, base_f[:, :, order], atol=1e-5)
+    assert torch.allclose(swap_a, base_a[:, :, order], atol=1e-5)
+
+
+def test_only_relative_agent_positions_matter():
+    """Translating everyone together must change nothing."""
+    model = multi_model()
+    frames, signal, indices, origins, ftau, atau = multi_inputs()
+
+    with torch.no_grad():
+        base, _ = model(frames, signal, ftau, atau, origins=origins,
+                        action_indices=indices)
+        moved, _ = model(frames, signal, ftau, atau, origins=origins + 7,
+                         action_indices=indices)
+
+    assert torch.allclose(moved, base, atol=1e-4)
+
+
+def test_agents_sharing_a_position_are_not_distinguishable():
+    """The flip side: identity is positional, so position must differ."""
+    model = multi_model()
+    frames, signal, indices, origins, ftau, atau = multi_inputs()
+    collided = origins.clone()
+    collided[0, 1] = origins[0, 0]
+
+    with torch.no_grad():
+        base, _ = model(frames, signal, ftau, atau, origins=origins,
+                        action_indices=indices)
+        same, _ = model(frames, signal, ftau, atau, origins=collided,
+                        action_indices=indices)
+
+    assert not torch.allclose(same, base, atol=1e-5)
+
+
+def test_multi_agent_actions_stay_causal():
+    model = multi_model()
+    frames, signal, indices, origins, ftau, atau = multi_inputs()
+    from marlenv.wm.multiagent import actions_to_signal
+
+    other = indices.clone()
+    other[:, 2, 0] = (indices[:, 2, 0] + 1) % 4
+    with torch.no_grad():
+        base, _ = model(frames, signal, ftau, atau, origins=origins,
+                        action_indices=indices)
+        changed, _ = model(frames, actions_to_signal(other, 4), ftau, atau,
+                           origins=origins, action_indices=other)
+    delta = (changed - base).abs().amax(dim=(2, 3, 4, 5))[0]
+
+    assert torch.all(delta[:3] == 0), 'an action reached its own frame'
+    assert delta[3] > 0, 'an action did not reach the next frame'
+
+
+def test_dead_agents_stop_moving():
+    """Otherwise their tokens wander onto living agents' cells."""
+    model = multi_model(agents=2)
+    actions = torch.zeros(1, 4, 2, dtype=torch.long)
+    alive = torch.ones(1, 5, 2, dtype=torch.bool)
+    alive[0, 3:, 1] = False
+    origins = torch.tensor([[[0, 0], [3, 0]]])
+
+    displacement, _ = model.trajectory(actions, origins, alive)
+    frozen = displacement[0, :, 1]
+
+    assert torch.equal(frozen[3], frozen[2])
+    assert torch.equal(frozen[4], frozen[2])
+    assert not torch.equal(displacement[0, 4, 0], displacement[0, 2, 0])
+
+
+def test_noise_broadcast_handles_frames_and_actions():
+    """Frames carry three trailing dims, action vectors one."""
+    from marlenv.wm.diffusion import add_noise, from_velocity, to_velocity
+
+    for shape, tau_shape in (((2, 3, 4, 9, 9, 3), (2, 3, 4)),
+                             ((2, 3, 4, 5), (2, 3, 4))):
+        clean = torch.randn(*shape).clamp(-1, 1)
+        noise = torch.randn_like(clean)
+        tau = torch.rand(*tau_shape)
+        noisy = add_noise(clean, tau, noise)
+        back, back_noise = from_velocity(noisy, to_velocity(clean, noise,
+                                                            tau), tau)
+
+        assert noisy.shape == clean.shape
+        assert torch.allclose(back, clean, atol=1e-5)
+        assert torch.allclose(back_noise, noise, atol=1e-5)
