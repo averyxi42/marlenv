@@ -49,6 +49,11 @@ def parse_args():
                         'itself, so step zero computes what it did before')
     p.add_argument('--log-every', type=int, default=500)
     p.add_argument('--checkpoint-every', type=int, default=2000)
+    p.add_argument('--save-at-start', action='store_true',
+                   help='write the checkpoint before training touches it. '
+                        'With --init and a deeper --depth that is the graft '
+                        'itself, which should behave exactly like what it '
+                        'grew from -- worth being able to check')
     p.add_argument('--device', default=None)
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--out', default='marlenv/demodata/wm_multi')
@@ -164,9 +169,27 @@ def main():
                                   weight_decay=0.01, betas=(0.9, 0.95))
     schedule = torch.optim.lr_scheduler.LambdaLR(
         optimizer, lambda step: min((step + 1) / 200, 1.0)
-        * 0.5 * (1 + np.cos(np.pi * min(step / args.steps, 1.0))))
+        * 0.5 * (1 + np.cos(np.pi * min(step / max(args.steps, 1), 1.0))))
 
     os.makedirs(args.out, exist_ok=True)
+
+    def snapshot(step, history):
+        state = {'model': model.state_dict(), 'num_agents': agents,
+                 'view': sequences['observations'].shape[3],
+                 'dim': args.dim, 'depth': args.depth,
+                 'heads': args.heads, 'context': args.context,
+                 'frame': 'world', 'num_actions': 4,
+                 'align_coords': True, 'history': history}
+        # a stamped copy as well as the rolling one: intermediate
+        # checkpoints are how an early rollout gets inspected, and
+        # saving only model.pt threw every one of them away
+        torch.save(state, os.path.join(args.out, 'model.pt'))
+        torch.save(state, os.path.join(args.out, f'model_step{step}.pt'))
+
+    if args.save_at_start:
+        snapshot(0, [])
+        print(f'  saved step 0 to {args.out}')
+
     history, window, start = [], [], time.time()
     for step in range(args.steps):
         loss, frame_loss, action_loss = multi_training_loss(
@@ -197,18 +220,7 @@ def main():
                   f'  {record["elapsed"]:.0f}s', flush=True)
 
         if (step + 1) % args.checkpoint_every == 0 or step + 1 == args.steps:
-            state = {'model': model.state_dict(), 'num_agents': agents,
-                     'view': sequences['observations'].shape[3],
-                     'dim': args.dim, 'depth': args.depth,
-                     'heads': args.heads, 'context': args.context,
-                     'frame': 'world', 'num_actions': 4,
-                     'align_coords': True, 'history': history}
-            # a stamped copy as well as the rolling one: intermediate
-            # checkpoints are how an early rollout gets inspected, and
-            # saving only model.pt threw every one of them away
-            torch.save(state, os.path.join(args.out, 'model.pt'))
-            torch.save(state,
-                       os.path.join(args.out, f'model_step{step + 1}.pt'))
+            snapshot(step + 1, history)
 
     with open(os.path.join(args.out, 'history.json'), 'w') as handle:
         json.dump(history, handle, indent=2)
