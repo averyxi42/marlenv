@@ -9,11 +9,12 @@ first breaks that circularity; denoising both at once could not.
 A human's action is held fixed by overwriting it at every denoising step,
 which conditions the sample on it while the others are free.
 """
-import numpy as np
 import torch
 
-from marlenv.core.palette import EMPTY_RGB
-from marlenv.wm.data import to_model_input
+from marlenv.core.palette import decode_grid
+from marlenv.core.snake import Cell
+from marlenv.grading.compare import PALETTE_SNAKES
+from marlenv.wm.data import to_pixels
 from marlenv.wm.diffusion import alpha_sigma, from_velocity
 from marlenv.wm.model import HEADINGS
 from marlenv.wm.multiagent import actions_to_signal, signal_to_actions
@@ -156,17 +157,24 @@ class MultiAgentRunner:
         return actions, frame
 
 
-def looks_dead(frame, empty_reference):
-    """Is this frame the black one the model predicts on death?
+SNAKE_KINDS = (Cell.HEAD.value, Cell.BODY.value, Cell.TAIL.value)
 
-    Compared against the empty-cell colour rather than to a threshold: an
-    agent staring at nothing but empty space is nearly black too, and the
-    two are only a sixth of the range apart. Nearest prototype separates
-    them without a constant to tune.
+
+def looks_dead(frame, num_snakes=PALETTE_SNAKES):
+    """Has this viewpoint stopped being a living snake's head?
+
+    While an agent lives, the centre of its view is its own head, by
+    construction. Once it dies the view is taken from the cell it died
+    entering, so the centre shows whatever is there instead. That makes
+    death a property of the observation rather than a sentinel value, and
+    needs no threshold.
     """
-    to_black = (frame + 1.0).abs().mean(dim=(-3, -2, -1))
-    to_empty = (frame - empty_reference).abs().mean(dim=(-3, -2, -1))
-    return to_black < to_empty
+    pixels = to_pixels(frame.detach().cpu().numpy())
+    middle = pixels.shape[-2] // 2
+    centre = pixels[..., middle, middle, :]
+    grid = decode_grid(centre.reshape(-1, 1, 3), num_snakes).reshape(-1)
+    return torch.tensor([int(v) % 10 != Cell.HEAD.value for v in grid],
+                        device=frame.device)
 
 
 class CachedMultiRunner(MultiAgentRunner):
@@ -192,9 +200,6 @@ class CachedMultiRunner(MultiAgentRunner):
         self.time = 0
         self.displacement = None
         self.live = None
-        empty = to_model_input(np.array(EMPTY_RGB, dtype=np.uint8))
-        self.empty_reference = torch.tensor(empty, dtype=torch.float32,
-                                            device=self.device)
 
     def reset(self, frame):
         super().reset(frame)
@@ -322,7 +327,7 @@ class CachedMultiRunner(MultiAgentRunner):
         self.time += 1
 
         # the black frame is the model's own death signal, so read it back
-        died = looks_dead(frame[0, 0], self.empty_reference)
+        died = looks_dead(frame[0, 0])
         for agent in range(self.num_agents):
             if self.live[agent] and bool(died[agent]):
                 self.live[agent] = False

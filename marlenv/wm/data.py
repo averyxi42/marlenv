@@ -27,7 +27,6 @@ import numpy as np
 from marlenv.core.snake import Direction
 from marlenv.grading.compare import unrotate_view
 
-BLACK = 0
 HEADINGS = list(Direction)
 
 
@@ -54,16 +53,14 @@ def agent_sequences(episode, frame='ego'):
         last = living[-1]
         died = last + 1 < frames and not alive[last + 1, agent]
 
-        obs = observations[:last + 1, agent]
+        # include the aftermath frame when the agent died
+        stop = last + 2 if died else last + 1
+        obs = observations[:stop, agent]
         if frame == 'world':
-            headings = episode['poses'][:last + 1, agent, 2]
+            headings = episode['poses'][:stop, agent, 2]
             obs = np.stack([unrotate_view(view, HEADINGS[int(heading)])
                             for view, heading in zip(obs, headings)])
-        actions = chosen[:last + 1, agent].argmax(axis=-1)
-        if died:
-            obs = np.concatenate([obs, np.full_like(obs[:1], BLACK)])
-        else:
-            actions = actions[:-1]
+        actions = chosen[:stop, agent].argmax(axis=-1)[:len(obs) - 1]
         yield obs, actions.astype(np.int64), bool(died)
 
 

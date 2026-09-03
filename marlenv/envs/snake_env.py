@@ -323,10 +323,17 @@ class SnakeEnv(gym.Env):
                                     noise=self.obs_noise)
 
     def egocentric_rgb(self):
-        """Each snake's own view: ``(num_snakes, size, size, 3)`` uint8.
+        """The view from each snake's head: ``(num_snakes, size, size, 3)``.
 
         Odd-sized, centred on the head and rotated so the snake faces up.
-        Dead snakes get an all-zero view, since they observe nothing.
+
+        A view is a property of a *viewpoint*, not of a snake: it answers
+        what would be seen looking from here. A dead snake therefore still
+        gets a real view, taken from the cell it died entering -- its head
+        advances there and then stops -- showing the aftermath rather than a
+        blank. That keeps every observation in distribution, and death stays
+        detectable because the centre cell is no longer the viewer's own
+        head.
         """
         if not self.view_radius:
             raise RuntimeError(
@@ -336,9 +343,8 @@ class SnakeEnv(gym.Env):
         frame = self._padded_rgb(radius)
         views = np.zeros((self.num_snakes, size, size, 3), dtype=np.uint8)
         for i, snake in enumerate(self.snakes):
-            if snake.alive:
-                views[i] = egocentric_crop(frame, snake.head_coord,
-                                           snake.direction, radius, radius)
+            views[i] = egocentric_crop(frame, snake.head_coord,
+                                       snake.direction, radius, radius)
         return views
 
     def close(self):

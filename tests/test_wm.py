@@ -114,19 +114,25 @@ def test_pixel_conversion_round_trips():
 
 
 # ---------------------------------------------------------------------- data
-def test_death_appends_exactly_one_black_frame():
+def test_death_keeps_the_aftermath_frame():
+    """A view belongs to a position, so the frame after death is a real one.
+
+    It is the ordinary view from the cell the snake died entering, with its
+    own body gone -- no sentinel value, and nothing out of distribution.
+    """
     episode = {
         'alive_mask': np.array([[True], [True], [True], [False]]),
         'observations': np.full((4, 1, 9, 9, 3), 200, dtype=np.uint8),
         'ego_actions': np.zeros((4, 1, 3), dtype=np.uint8),
     }
+    episode['observations'][3] = 77         # whatever the aftermath looks like
     episode['ego_actions'][..., 0] = 1
 
     (obs, actions, died), = list(agent_sequences(episode))
 
     assert died
-    assert len(obs) == 4               # three living frames plus the marker
-    assert (obs[-1] == 0).all()
+    assert len(obs) == 4               # three living frames plus the aftermath
+    assert (obs[-1] == 77).all(), 'the aftermath view was replaced'
     assert (obs[-2] == 200).all()
     assert len(actions) == len(obs) - 1
 
@@ -860,16 +866,20 @@ def test_cached_runner_holds_a_fixed_action():
     runner.reset(torch.randn(1, 1, 3, 9, 9, 3))
 
     for _ in range(8):
+        was_live = runner.live[1]
         actions, _ = runner.step(fixed={1: 3}, denoise_steps=2,
                                  action_steps=2)
-        assert int(actions[1]) == 3
+        # an untrained model generates noise, which reads as death; the held
+        # action only applies while the agent is still in the sequence
+        if was_live:
+            assert int(actions[1]) == 3
 
-    # the window bounds the cache in whole steps. A step is every agent's
-    # patches plus its action; the frame most recently generated is already
-    # committed but has no action yet, so it sits on top of that count.
-    step_tokens = 3 * (9 + 1)
+    # the window bounds the cache in whole steps, and the cache always holds
+    # exactly the tokens its recorded steps account for. Sizes vary, since a
+    # step shrinks as agents drop out -- an untrained model generates noise,
+    # which reads as death, so they drop out quickly here.
     assert runner.cache.frames <= 4          # window - 1 committed steps
-    assert len(runner.cache) == runner.cache.frames * step_tokens + 3 * 9
+    assert len(runner.cache) == sum(runner.cache.step_sizes)
 
 
 # ------------------------------------------------------------ dead agents
@@ -912,22 +922,36 @@ def test_training_pins_dead_agent_tokens():
     assert first.item() == pytest.approx(second.item(), rel=1e-5)
 
 
-def test_black_frame_is_told_from_an_empty_view():
-    """Both are nearly black; a tuned threshold would not separate them."""
-    import numpy as np
-    from marlenv.core.palette import EMPTY_RGB
+def test_death_is_read_off_the_centre_cell():
+    """While an agent lives the centre of its view is its own head.
+
+    Once it dies the view is taken from the cell it died entering, so the
+    centre is something else. No threshold, and nothing out of distribution.
+    """
+    import gymnasium as gym
     from marlenv.wm.data import to_model_input
     from marlenv.wm.marunner import looks_dead
 
-    reference = torch.tensor(to_model_input(np.array(EMPTY_RGB, np.uint8)),
-                             dtype=torch.float32)
-    black = torch.full((1, 9, 9, 3), -1.0)
-    empty = torch.tensor(
-        to_model_input(np.tile(np.array(EMPTY_RGB, np.uint8), (1, 9, 9, 1))),
-        dtype=torch.float32)
+    env = gym.make('Snake-v1', height=13, width=13, num_snakes=3,
+                   view_radius=4, observation_noise=0.0,
+                   snake_noise_sigma=0.0, background_gradient=0.0,
+                   disable_env_checker=True)
+    env.reset(seed=2)
+    env.action_space.seed(2)
+    base = env.unwrapped
 
-    assert bool(looks_dead(black, reference)[0])
-    assert not bool(looks_dead(empty, reference)[0])
+    saw_a_death = False
+    for _ in range(20):
+        views = torch.tensor(to_model_input(base.egocentric_rgb()))
+        detected = looks_dead(views).tolist()
+        actual = [not snake.alive for snake in base.snakes]
+        assert detected == actual, f'{detected} != {actual}'
+        saw_a_death |= any(actual)
+        if all(actual):
+            break
+        env.step(list(env.action_space.sample()))
+
+    assert saw_a_death, 'no death occurred to check'
 
 
 def test_dead_agents_leave_the_token_stream():

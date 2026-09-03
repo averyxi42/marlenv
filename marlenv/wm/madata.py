@@ -5,16 +5,19 @@ into one sequence per agent. Agents are placed in a single shared frame, so
 their starting offsets relative to each other are recorded; only the
 differences are used, so nothing about the board's absolute position enters.
 
-A dead agent keeps its slot with a black frame, which is what the model
-learns to predict on death, and its loss is masked from the frame after that
-so it is not trained to keep restating a fact already established.
+When an agent dies, the frame that follows is the ordinary view from the
+cell it died entering -- the aftermath, with its own snake gone. That keeps
+every observation in distribution and needs no sentinel value, and it is
+what the identity-free formulation implies: a view belongs to a position,
+not to an agent. Death is read off the centre cell, which is the viewer's
+own head while it lives and something else once it does not. The viewpoint
+then stops being updated, so later frames are masked out of the loss.
 """
 import numpy as np
 
 from marlenv.core.snake import Direction
 from marlenv.grading.compare import unrotate_view
 
-BLACK = 0
 HEADINGS = list(Direction)
 
 
@@ -36,8 +39,7 @@ def episode_sequence(episode):
         for t in range(frames)])
     actions = episode['cardinal_actions'].argmax(axis=-1)
 
-    # a dead agent shows black from its death frame onward
-    observations = views.copy()
+    observations = views
     trained = alive.copy()
     for agent in range(agents):
         living = np.flatnonzero(alive[:, agent])
@@ -45,8 +47,7 @@ def episode_sequence(episode):
             continue
         last = living[-1]
         if last + 1 < frames:
-            observations[last + 1:, agent] = BLACK
-            # the death frame itself is worth predicting; later ones are not
+            # the aftermath is worth predicting; the viewpoint then stops
             trained[last + 1, agent] = True
             trained[last + 2:, agent] = False
 

@@ -113,16 +113,27 @@ def test_padding_carries_persistent_noise():
     assert len(np.unique(first[0:3].reshape(-1, 3), axis=0)) > 1
 
 
-def test_dead_snakes_observe_nothing():
+def test_dead_snakes_see_the_aftermath():
+    """A view answers what is visible from a position, not who is looking.
+
+    A dead snake's viewpoint is the cell it died entering, so it still gets
+    a real view; death shows up as the centre no longer being its own head.
+    """
+    from marlenv.core.palette import decode_grid
+    from marlenv.grading.compare import PALETTE_SNAKES
+
     env = make(radius=3)
     env.reset(seed=0)
     base = env.unwrapped
+
+    alive_view = base.egocentric_rgb()[1]
+    centre = decode_grid(alive_view, PALETTE_SNAKES)[3, 3]
+    assert centre % 10 == Cell.HEAD.value
+
     base.snakes[1].alive = False
+    dead_view = base.egocentric_rgb()[1]
 
-    views = base.egocentric_rgb()
-
-    assert np.all(views[1] == 0)
-    assert np.any(views[0] != 0)
+    assert np.any(dead_view != 0), 'a dead viewpoint still sees the board'
 
 
 def test_view_radius_is_required():
