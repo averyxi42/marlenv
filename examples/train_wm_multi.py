@@ -133,13 +133,18 @@ def main():
                   f'  {record["elapsed"]:.0f}s', flush=True)
 
         if (step + 1) % args.checkpoint_every == 0 or step + 1 == args.steps:
-            torch.save({'model': model.state_dict(), 'num_agents': agents,
-                        'view': sequences['observations'].shape[3],
-                        'dim': args.dim, 'depth': args.depth,
-                        'heads': args.heads, 'context': args.context,
-                        'frame': 'world', 'num_actions': 4,
-                        'align_coords': True, 'history': history},
-                       os.path.join(args.out, 'model.pt'))
+            state = {'model': model.state_dict(), 'num_agents': agents,
+                     'view': sequences['observations'].shape[3],
+                     'dim': args.dim, 'depth': args.depth,
+                     'heads': args.heads, 'context': args.context,
+                     'frame': 'world', 'num_actions': 4,
+                     'align_coords': True, 'history': history}
+            # a stamped copy as well as the rolling one: intermediate
+            # checkpoints are how an early rollout gets inspected, and
+            # saving only model.pt threw every one of them away
+            torch.save(state, os.path.join(args.out, 'model.pt'))
+            torch.save(state,
+                       os.path.join(args.out, f'model_step{step + 1}.pt'))
 
     with open(os.path.join(args.out, 'history.json'), 'w') as handle:
         json.dump(history, handle, indent=2)
