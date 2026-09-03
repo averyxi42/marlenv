@@ -1,0 +1,4 @@
+# collected data is regenerable from a seed, so it stays out of git
+*
+!.gitignore
+!README.md
