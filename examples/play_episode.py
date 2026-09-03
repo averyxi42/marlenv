@@ -59,6 +59,11 @@ def parse_args():
     p.add_argument('--device', default=None)
     p.add_argument('--num-snakes', type=int, default=3)
     p.add_argument('--num-fruits', type=int, default=4)
+    p.add_argument('--view-radius', type=int, default=None,
+                   help='egocentric RGB view radius; also writes a second '
+                        'gif tiling every agent\'s own view')
+    p.add_argument('--tile-scale', type=int, default=12,
+                   help='pixels per cell in the tiled observation gif')
     p.add_argument('--observation-noise', type=float, default=5.0,
                    help='sigma of the bound RGB observation noise '
                         '(classic style; 0 disables)')
@@ -142,6 +147,26 @@ def load_network(args):
     return NetworkEvaluator(net, device=args.device)
 
 
+def tile_views(views, alive, scale, gap=4):
+    """Lay every agent's view out in a row, upscaled, dead ones dimmed."""
+    tiles = []
+    for view, is_alive in zip(views, alive):
+        tile = np.repeat(np.repeat(view, scale, axis=0), scale, axis=1)
+        if not is_alive:
+            tile = (tile * 0.25).astype(np.uint8)
+        tiles.append(tile)
+
+    height = tiles[0].shape[0]
+    width = sum(t.shape[1] for t in tiles) + gap * (len(tiles) - 1)
+    sheet = np.zeros((height, width, 3), dtype=np.uint8)
+    sheet[:] = (24, 24, 28)
+    x = 0
+    for tile in tiles:
+        sheet[:, x:x + tile.shape[1]] = tile
+        x += tile.shape[1] + gap
+    return sheet
+
+
 def main():
     args = parse_args()
 
@@ -154,6 +179,7 @@ def main():
         reward_dict=REWARD_DICT,
         render_style=args.style,
         cell_size=args.cell_size,
+        view_radius=args.view_radius,
         observation_noise=args.observation_noise,
         noise_period=args.noise_period,
         obstacle_density=args.obstacle_density,
@@ -169,10 +195,20 @@ def main():
 
     returns = np.zeros(args.num_snakes)
     fruits = np.zeros(args.num_snakes)
+    observation_frames = []
+
+    def capture_views():
+        if args.view_radius:
+            observation_frames.append(
+                tile_views(base.egocentric_rgb(),
+                           [s.alive for s in base.snakes], args.tile_scale))
+
+    capture_views()
     for step in range(1, args.steps + 1):
         action = solver.solve(env)
         _, rews, terminated, truncated, info = env.step(action)
         base.render('gif')
+        capture_views()
 
         alive = np.array([not done for done in terminated])
         returns += alive * np.asarray(rews)
@@ -202,6 +238,14 @@ def main():
     with Image.open(path) as gif:
         written = gif.n_frames
     print(f'wrote {written} frames to {path}')
+    if observation_frames:
+        stem, _, ext = path.rpartition('.')
+        obs_path = f'{stem}_obs.{ext or "gif"}'
+        images = [Image.fromarray(f, 'RGB') for f in observation_frames]
+        images[0].save(obs_path, save_all=True, append_images=images[1:],
+                       format='GIF', loop=0)
+        print(f'wrote {len(images)} tiled observation frames to {obs_path}')
+
     if written != buffered:
         print(f'note: {buffered - written} of {buffered} rendered frames '
               f'were identical to their predecessor and got merged')

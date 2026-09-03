@@ -14,7 +14,8 @@ network can be shared across snakes:
 """
 import numpy as np
 
-from marlenv.core.snake import Cell, Direction
+from marlenv.core.observation import HEADING_ROTATIONS
+from marlenv.core.snake import Cell
 
 # channel layout of a per-snake view
 CHANNELS = (
@@ -28,16 +29,6 @@ CHANNELS = (
     'other_tail',
 )
 NUM_CHANNELS = len(CHANNELS)
-
-# 90-degree counter-clockwise rotations that bring each heading round to UP.
-# np.rot90 maps a direction (dr, dc) to (-dc, dr), which gives this cycle.
-_ROTATIONS = {
-    Direction.UP: 0,
-    Direction.RIGHT: 1,
-    Direction.DOWN: 2,
-    Direction.LEFT: 3,
-}
-
 
 class GridFeatures:
     """Per-snake feature planes derived from a SnakeEnv's grid.
@@ -78,7 +69,7 @@ class GridFeatures:
             self.tail & ~mine,
         ]).astype(np.float32)
 
-        rotations = _ROTATIONS[snake.direction]
+        rotations = HEADING_ROTATIONS[snake.direction]
         if rotations:
             planes = np.rot90(planes, rotations, axes=(1, 2))
         return np.ascontiguousarray(planes)

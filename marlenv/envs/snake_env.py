@@ -15,6 +15,7 @@ from marlenv.core.grid_util import (
     rgb_from_grid, image_from_grid, image_from_rgb, add_obstacles,
     MEAN_OBSTACLE_AREA)
 from marlenv.core.noise import ObservationNoise
+from marlenv.core.observation import egocentric_crop, pad_grid
 from marlenv.core.render import draw_frame, image_from_env
 from marlenv.core.snake import Direction, Snake, Cell, CellColors
 from marlenv.envs.constants import FEATURE_CHANNEL, RGB_CHANNEL
@@ -85,6 +86,11 @@ class SnakeEnv(gym.Env):
         self.observation_noise = kwargs.pop('observation_noise', 0.0)
         self.noise_period = kwargs.pop('noise_period', 8)
         self.obs_noise = None
+
+        # radius of the egocentric RGB view; the view is
+        # (2 * view_radius + 1) square. None disables it. Distinct from
+        # vision_range, which crops the learned feature planes.
+        self.view_radius = kwargs.pop('view_radius', None)
 
         self.grid_size_range = kwargs.pop('grid_size_range', None)
         # obstacle_density is the fraction of interior cells walled off;
@@ -174,6 +180,7 @@ class SnakeEnv(gym.Env):
             self.obs_noise = ObservationNoise(
                 self.grid_shape, self.num_snakes,
                 sigma=self.observation_noise, period=self.noise_period,
+                pad=self.view_radius or 0,
                 np_random=self.np_random.spawn(1)[0])
 
         # Episodic stats
@@ -278,6 +285,32 @@ class SnakeEnv(gym.Env):
         if self.obs_noise is not None:
             rgb_array = self.obs_noise.apply(rgb_array, self.snakes)
         return rgb_array
+
+    def _padded_rgb(self, pad):
+        """The board rendered with ``pad`` cells of free space around it."""
+        rgb_array = rgb_from_grid(pad_grid(self.grid, pad), Cell, CellColors)
+        if self.obs_noise is not None:
+            rgb_array = self.obs_noise.apply(rgb_array, self.snakes, pad=pad)
+        return rgb_array
+
+    def egocentric_rgb(self):
+        """Each snake's own view: ``(num_snakes, size, size, 3)`` uint8.
+
+        Odd-sized, centred on the head and rotated so the snake faces up.
+        Dead snakes get an all-zero view, since they observe nothing.
+        """
+        if not self.view_radius:
+            raise RuntimeError(
+                'egocentric_rgb() needs view_radius set on the env')
+        radius = self.view_radius
+        size = 2 * radius + 1
+        frame = self._padded_rgb(radius)
+        views = np.zeros((self.num_snakes, size, size, 3), dtype=np.uint8)
+        for i, snake in enumerate(self.snakes):
+            if snake.alive:
+                views[i] = egocentric_crop(frame, snake.head_coord,
+                                           snake.direction, radius, radius)
+        return views
 
     def close(self):
         pass
