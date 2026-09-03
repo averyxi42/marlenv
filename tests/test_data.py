@@ -181,3 +181,50 @@ def test_mismatched_episode_shapes_are_rejected():
 
     with pytest.raises(ValueError, match='num_agents'):
         build_dataset(small + large)
+
+
+# ----------------------------------------------------------------- parallel
+def small_config(**kwargs):
+    from marlenv.data import CollectConfig
+    defaults = dict(height=11, width=11, num_snakes=2, num_fruits=3,
+                    view_radius=3, max_steps=12)
+    defaults.update(kwargs)
+    return CollectConfig(**defaults)
+
+
+def test_parallel_collection_covers_every_seed(tmp_path):
+    from marlenv.data import collect_dataset
+
+    dataset = collect_dataset(small_config(), num_episodes=6,
+                              out_dir=str(tmp_path / 'shards'), workers=3)
+
+    assert len(dataset) == 6
+    assert sorted(dataset['seed']) == list(range(6))
+
+
+def test_sharding_does_not_change_the_episodes_a_seed_produces(tmp_path):
+    """Board layout comes from the seed, so it must survive sharding."""
+    from marlenv.data import collect_dataset
+
+    one = collect_dataset(small_config(), 4, str(tmp_path / 'a'), workers=1)
+    many = collect_dataset(small_config(), 4, str(tmp_path / 'b'), workers=2)
+
+    for seed in range(4):
+        first = decode_episode(one[one['seed'].index(seed)])
+        second = decode_episode(many[many['seed'].index(seed)])
+        # the initial state is fixed by the seed; later frames depend on the
+        # policy, whose stream is per shard
+        assert np.array_equal(first['content'][0], second['content'][0])
+
+
+def test_epsilon_injects_exploration():
+    from marlenv.data import make_policy
+
+    rng = np.random.default_rng(0)
+    env = small_config().make_env()
+    env.reset(seed=0)
+    greedy = make_policy(small_config(epsilon=0.0), rng)
+    noisy = make_policy(small_config(epsilon=1.0), rng)
+
+    assert len(list(greedy(env))) == 2
+    assert all(0 <= a < 3 for a in noisy(env))
