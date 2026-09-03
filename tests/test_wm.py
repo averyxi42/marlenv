@@ -254,3 +254,40 @@ def test_canvas_clips_instead_of_failing():
 
     assert canvas.add(view, make_pose(0, 0, Direction.UP))
     assert not canvas.add(view, make_pose(500, 500, Direction.UP))
+
+
+def test_echoing_the_input_cannot_score_well():
+    """The failure v-prediction exists to prevent.
+
+    Under epsilon-prediction a model that simply returns its input scores
+    near zero at high noise, because the input is almost pure noise there.
+    That is a perfect score for a model that has learned nothing, and it is
+    what a rollout then starts from.
+    """
+    class Echo(torch.nn.Module):
+        def forward(self, noisy, actions, tau):
+            return noisy
+
+    frames = torch.randn(2, 4, 9, 9, 3).clamp(-1, 1)
+    actions = torch.randint(0, 3, (2, 3))
+    mask = torch.ones(2, 4, dtype=torch.bool)
+
+    generator = torch.Generator().manual_seed(0)
+    loss = training_loss(Echo(), frames, actions, mask, generator=generator)
+
+    assert loss.item() > 0.5, 'echoing the input should be heavily penalised'
+
+
+def test_velocity_round_trips_at_every_noise_level():
+    from marlenv.wm.diffusion import from_velocity, to_velocity
+
+    clean = torch.randn(2, 4, 9, 9, 3).clamp(-1, 1)
+    noise = torch.randn_like(clean)
+    for value in (0.0, 0.3, 0.7, 1.0):
+        tau = torch.full((2, 4), value)
+        noisy = add_noise(clean, tau, noise)
+        recovered, recovered_noise = from_velocity(
+            noisy, to_velocity(clean, noise, tau), tau)
+
+        assert torch.allclose(recovered, clean, atol=1e-5)
+        assert torch.allclose(recovered_noise, noise, atol=1e-5)

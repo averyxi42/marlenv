@@ -12,6 +12,7 @@ import torch
 from datasets import load_from_disk
 
 from marlenv.wm import SequenceBatcher, WorldModel, build_sequences, train
+from marlenv.wm.diagnostics import format_report, noise_level_report
 
 
 def parse_args():
@@ -28,6 +29,10 @@ def parse_args():
     p.add_argument('--depth', type=int, default=6)
     p.add_argument('--heads', type=int, default=8)
     p.add_argument('--log-every', type=int, default=200)
+    p.add_argument('--checkpoint-every', type=int, default=1000,
+                   help='iterations between rolling checkpoints')
+    p.add_argument('--report-every', type=int, default=1000,
+                   help='iterations between per-tau reconstruction reports')
     p.add_argument('--device', default=None)
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--out', default='marlenv/demodata/wm')
@@ -85,10 +90,37 @@ def main():
           f'context={args.context}  tokens/seq='
           f'{args.context * (model.tokens_per_frame + 1) - 1}')
 
+    os.makedirs(args.out, exist_ok=True)
+
+    def save(path, history):
+        torch.save({'model': model.state_dict(), 'view': view,
+                    'dim': args.dim, 'depth': args.depth, 'heads': args.heads,
+                    'context': args.context, 'history': history}, path)
+
+    # tau values worth watching: the low end is nearly free, and the high end
+    # is what a rollout actually starts from
+    watched = (0.2, 0.6, 0.9, 1.0)
+    records = []
+
     def log(record):
-        print(f'  step {record["step"]:6d}  loss {record["loss"]:.4f}  '
-              f'val {record.get("val_loss", float("nan")):.4f}  '
-              f'lr {record["lr"]:.2e}  {record["elapsed"]:.0f}s', flush=True)
+        records.append(record)
+        step = record['step']
+        line = (f'  step {step:6d}  loss {record["loss"]:.4f}  '
+                f'val {record.get("val_loss", float("nan")):.4f}  '
+                f'lr {record["lr"]:.2e}  {record["elapsed"]:.0f}s')
+        if step % args.report_every == 0 or step == args.steps:
+            report = noise_level_report(model, validation, levels=watched,
+                                        batches=2, batch_size=16)
+            record['noise_levels'] = report
+            recon = '  '.join(
+                f'{row["tau"]:.1f}:{row["reconstruction_mse"]:.4f}'
+                for row in report)
+            line += f'\n         recon by tau  {recon}'
+        if step % args.checkpoint_every == 0 or step == args.steps:
+            save(os.path.join(args.out, 'model.pt'), records)
+            save(os.path.join(args.out, f'model_step{step}.pt'), records)
+            line += f'   [saved step {step}]'
+        print(line, flush=True)
 
     start = time.time()
     history = train(model, batcher, steps=args.steps,
@@ -96,11 +128,11 @@ def main():
                     log_every=args.log_every, device=device,
                     validation=validation, on_log=log)
 
-    os.makedirs(args.out, exist_ok=True)
-    torch.save({'model': model.state_dict(), 'view': view, 'dim': args.dim,
-                'depth': args.depth, 'heads': args.heads,
-                'context': args.context, 'history': history},
-               os.path.join(args.out, 'model.pt'))
+    print('\nfinal reconstruction by noise level '
+          '(what a rollout depends on):')
+    print(format_report(noise_level_report(model, validation)))
+
+    save(os.path.join(args.out, 'model.pt'), history)
     with open(os.path.join(args.out, 'history.json'), 'w') as handle:
         json.dump(history, handle, indent=2)
     print(f'saved to {args.out}  ({time.time() - start:.0f}s)')

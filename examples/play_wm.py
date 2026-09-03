@@ -226,7 +226,7 @@ def main():
 
     pending = None
     snapped = True
-    paused = False
+    paused = True
     frames = []
     last_move = 0.0
     running = True
