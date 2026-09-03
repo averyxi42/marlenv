@@ -5,22 +5,45 @@ three. A sequence runs from the first frame to the agent's last living one;
 if the agent *died* a single black frame is appended to mark it, which is the
 only thing there is to predict past that point. An episode cut short by the
 step limit just ends, with no marker, because nothing happened there.
+
+Two frames of reference are available, and which one is used changes what
+the model has to learn:
+
+``ego``
+    the stored head-frame views, rotated so the agent always faces up, with
+    the three relative actions. Consecutive frames are related by a
+    translation *and*, whenever the agent turns, a 90 degree rotation.
+``world``
+    the same views rotated back so north is up, with the four cardinal
+    actions. Consecutive frames now differ by a pure translation whatever
+    the agent does, and the map never spins.
+
+The pair is the experiment for whether rotation is what stops the model
+carrying geometry across turns: the underlying trajectory is identical, only
+the frame of reference differs.
 """
 import numpy as np
 
+from marlenv.core.snake import Direction
+from marlenv.grading.compare import unrotate_view
+
 BLACK = 0
+HEADINGS = list(Direction)
 
 
-def agent_sequences(episode):
+def agent_sequences(episode, frame='ego'):
     """Split a decoded episode into one sequence per agent.
 
     Yields ``(observations, actions, died)`` where ``observations`` is
     ``(L, S, S, 3)`` uint8 and ``actions`` is ``(L - 1,)`` int64, the action
-    taken from each frame except the last.
+    taken from each frame except the last. See the module docstring for what
+    ``frame`` changes.
     """
+    if frame not in ('ego', 'world'):
+        raise ValueError("frame must be 'ego' or 'world'")
     alive = episode['alive_mask']
     observations = episode['observations']
-    ego = episode['ego_actions']
+    chosen = episode['ego_actions' if frame == 'ego' else 'cardinal_actions']
     frames, agents = alive.shape
 
     for agent in range(agents):
@@ -32,7 +55,11 @@ def agent_sequences(episode):
         died = last + 1 < frames and not alive[last + 1, agent]
 
         obs = observations[:last + 1, agent]
-        actions = ego[:last + 1, agent].argmax(axis=-1)
+        if frame == 'world':
+            headings = episode['poses'][:last + 1, agent, 2]
+            obs = np.stack([unrotate_view(view, HEADINGS[int(heading)])
+                            for view, heading in zip(obs, headings)])
+        actions = chosen[:last + 1, agent].argmax(axis=-1)
         if died:
             obs = np.concatenate([obs, np.full_like(obs[:1], BLACK)])
         else:
@@ -40,7 +67,8 @@ def agent_sequences(episode):
         yield obs, actions.astype(np.int64), bool(died)
 
 
-def build_sequences(datasets, max_length=None, limit=None):
+def build_sequences(datasets, max_length=None, limit=None,
+                    frame='ego'):
     """Collect padded arrays over one or more HuggingFace datasets.
 
     Returns a dict of ``observations (n, L, S, S, 3) uint8``,
@@ -55,7 +83,8 @@ def build_sequences(datasets, max_length=None, limit=None):
         for index, row in enumerate(dataset):
             if limit is not None and len(sequences) >= limit:
                 break
-            sequences.extend(agent_sequences(decode_episode(row)))
+            sequences.extend(agent_sequences(decode_episode(row),
+                                             frame=frame))
 
     if not sequences:
         raise ValueError('no usable agent sequences')

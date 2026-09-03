@@ -21,6 +21,10 @@ def parse_args():
     p.add_argument('--components', nargs='+', default=['expert', 'explore'])
     p.add_argument('--episodes-per-component', type=int, default=None)
     p.add_argument('--val-fraction', type=float, default=0.05)
+    p.add_argument('--frame', choices=['ego', 'world'], default='ego',
+                   help="'world' un-rotates views to north-up and uses the "
+                        'four cardinal actions, so consecutive frames differ '
+                        'by a pure translation')
     p.add_argument('--context', type=int, default=24)
     p.add_argument('--steps', type=int, default=4000)
     p.add_argument('--batch-size', type=int, default=32)
@@ -69,7 +73,8 @@ def main():
     device = args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
 
     print('loading components:')
-    sequences = build_sequences(load_components(args))
+    sequences = build_sequences(load_components(args),
+                                frame=args.frame)
     train_set, val_set = split(sequences, args.val_fraction, args.seed)
     print(f'  {len(sequences["observations"])} agent sequences '
           f'({len(train_set["observations"])} train / '
@@ -83,9 +88,11 @@ def main():
                                  device=device)
 
     view = sequences['observations'].shape[2]
+    num_actions = 3 if args.frame == 'ego' else 4
     model = WorldModel(view=view, dim=args.dim, depth=args.depth,
-                       heads=args.heads)
+                       heads=args.heads, num_actions=num_actions)
     params = sum(p.numel() for p in model.parameters())
+    print(f'frame={args.frame}  actions={num_actions}')
     print(f'device={device}  params={params / 1e6:.2f}M  '
           f'context={args.context}  tokens/seq='
           f'{args.context * (model.tokens_per_frame + 1) - 1}')
@@ -95,7 +102,8 @@ def main():
     def save(path, history):
         torch.save({'model': model.state_dict(), 'view': view,
                     'dim': args.dim, 'depth': args.depth, 'heads': args.heads,
-                    'context': args.context, 'history': history}, path)
+                    'context': args.context, 'frame': args.frame,
+                    'num_actions': num_actions, 'history': history}, path)
 
     # tau values worth watching: the low end is nearly free, and the high end
     # is what a rollout actually starts from
