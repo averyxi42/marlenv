@@ -1300,3 +1300,41 @@ def test_an_unseen_patch_reaches_neither_the_loss_nor_the_input():
     assert (original != scrambled).any(), 'nothing was actually changed'
     assert before == pytest.approx(after, abs=1e-6), (
         f'unseen pixels moved the loss: {before} vs {after}')
+
+
+def test_relabelling_every_identity_changes_nothing():
+    """Ids are labels. Renaming them, zero included, is not a change.
+
+    The scopes reach identity only through equality, so any injective
+    relabelling has to leave the masks -- and therefore the loss -- exactly
+    where they were. This is what lets an observer be 'agent 0' without that
+    meaning anything to the model.
+    """
+    from marlenv.flex_wm.train import flex_training_loss
+
+    _, model = shapes(schedule='FAGFAG', depth=6)
+    frames, actions, origins = sample(agents=3)
+    alive = torch.ones(*actions.shape, dtype=torch.bool)
+    pairs = pairs_from_arrays(frames, actions, origins, alive, model=model)
+
+    def loss_of(identities):
+        pairs.agent = identities
+        generator = torch.Generator().manual_seed(0)
+        total, frame, action = flex_training_loss(model, pairs, window=3,
+                                                  generator=generator)
+        return (float(total.detach()), float(frame.detach()),
+                float(action.detach()))
+
+    original = pairs.agent.clone()
+    before = loss_of(original)
+
+    # nothing keeps its name, and zero in particular becomes something else
+    renamed = original * 7 + 41
+    renamed = torch.where(original == 0,
+                          torch.full_like(original, 10 ** 9), renamed)
+    assert (renamed != original).all(), 'some identity kept its name'
+    assert len(torch.unique(renamed)) == len(torch.unique(original))
+
+    after = loss_of(renamed)
+    assert before == pytest.approx(after, abs=1e-9), (
+        f'the model reads something into an id: {before} vs {after}')
