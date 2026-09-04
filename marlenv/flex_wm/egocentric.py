@@ -139,19 +139,20 @@ def cardinal_from_step(before, after):
     return None
 
 
-def egocentric_pairs(episode, offsets, rng=None, radius=4, patch=3):
+def egocentric_pairs(episode, offsets, ego=None, rng=None, radius=4,
+                     patch=3):
     """An episode as a flat pair set, ready for a batcher.
 
     The same reconstruction as :func:`egocentric_episode`, in the shape the
     batcher crops. Every pair is a target -- what is unknown is said per
     patch, by ``visible``, not by dropping the observation.
     """
-    ego = egocentric_episode(episode, offsets, rng=rng, radius=radius,
-                             patch=patch)
-    return {'observations': ego.observations, 'actions': ego.actions,
-            'agent': ego.agent, 'time': ego.time, 'position': ego.position,
-            'visible': ego.visible, 'acted': ego.acted,
-            'trained': np.ones(len(ego), bool)}
+    seen = egocentric_episode(episode, offsets, ego=ego, rng=rng,
+                              radius=radius, patch=patch)
+    return {'observations': seen.observations, 'actions': seen.actions,
+            'agent': seen.agent, 'time': seen.time, 'position': seen.position,
+            'visible': seen.visible, 'acted': seen.acted,
+            'trained': np.ones(len(seen), bool)}
 
 
 def egocentric_episode(episode, offsets, ego=None, rng=None, radius=4,

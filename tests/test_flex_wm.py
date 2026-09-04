@@ -1232,3 +1232,29 @@ def test_a_pair_set_batcher_takes_the_rectangular_call():
     assert pairs.observations.shape[0] == 2
     assert weight.shape == (2,) and dropout.shape == (2,)
     assert pairs.time.max() < 6, 'the crop outran its context'
+
+
+def test_no_identity_covers_a_gap_in_time():
+    """An identity is one unbroken visit, or the observer holds on too long."""
+    from marlenv.flex_wm.egocentric import egocentric_pairs, patch_offsets
+
+    frames, view = 14, 9
+    poses = np.zeros((frames, 2, 3), np.int64)
+    alive = np.ones((frames, 2), bool)
+    cardinal = np.zeros((frames, 2, 4), np.int64)
+    cardinal[..., 1] = 1
+    poses[:, 0] = (5, 5, 1)
+    for t in range(frames):
+        # near, gone, near again
+        poses[t, 1] = (5, 6, 1) if t < 5 or t >= 10 else (5, 40, 1)
+    episode = {'alive_mask': alive, 'poses': poses,
+               'observations': np.zeros((frames, 2, view, view, 3),
+                                        np.uint8),
+               'cardinal_actions': cardinal}
+
+    pairs = egocentric_pairs(episode, patch_offsets(view, 3), ego=0)
+    for identity in np.unique(pairs['agent']):
+        times = np.sort(pairs['time'][pairs['agent'] == identity])
+        assert len(set(times.tolist())) == len(times), 'a time repeated'
+        assert np.all(np.diff(times) == 1), (
+            f'identity {identity} spans a gap it could not have seen across')
