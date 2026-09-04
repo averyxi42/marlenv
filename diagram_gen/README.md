@@ -31,19 +31,19 @@ Windows are scored for how much appearing and disappearing they contain, so
 `--steps 12` tends to find a snake seen three separate times, while a short
 window finds one clean entrance and exit.
 
-## `pair_rollouts.py`
+## `tile_rollouts.py`
 
-Two rollout gifs tiled side by side under captions. Reading them in separate
-windows means holding one in memory while watching the other, which is the
-comparison a reader is worst at.
+Rollout gifs tiled side by side under captions, any number of them. Reading
+them in separate windows means holding one in memory while watching
+another, which is the comparison a reader is worst at.
 
 ```bash
-python diagram_gen/pair_rollouts.py \
-    --left diagrams/rollout_ego_step12000.gif \
-    --right diagrams/rollout_nograd_step12000.gif \
-    --left-label "one agent's record" \
-    --right-label "every agent's record" \
-    --out diagrams/rollout_pair.gif
+python diagram_gen/tile_rollouts.py \
+    --gifs diagrams/rollout_solo_step24000.gif \
+           diagrams/rollout_ego_step24000.gif \
+           diagrams/rollout_nograd_step24000.gif \
+    --labels "one agent's record" "others deduced" "every agent's record" \
+    --out diagrams/rollout_trio.gif
 ```
 
 The sources are left alone; this writes a third file. Where one rollout ends
