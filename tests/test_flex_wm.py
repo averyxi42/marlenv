@@ -1156,14 +1156,14 @@ def test_a_death_gives_the_observer_its_last_action():
 
 
 def synthetic_episode(frames=10, agents=2, view=9):
-    """Two snakes side by side, both heading the same way throughout."""
+    """Snakes side by side, all heading the same way throughout."""
     poses = np.zeros((frames, agents, 3), np.int64)
     alive = np.ones((frames, agents), bool)
     cardinal = np.zeros((frames, agents, 4), np.int64)
     cardinal[..., 1] = 1
     for t in range(frames):
-        poses[t, 0] = (5, 5 + t, 1)
-        poses[t, 1] = (6, 5 + t, 1)
+        for agent in range(agents):
+            poses[t, agent] = (5 + agent, 5 + t, 1)
     rng = np.random.default_rng(0)
     return {'alive_mask': alive, 'poses': poses,
             'observations': rng.integers(
@@ -1338,3 +1338,22 @@ def test_relabelling_every_identity_changes_nothing():
     after = loss_of(renamed)
     assert before == pytest.approx(after, abs=1e-9), (
         f'the model reads something into an id: {before} vs {after}')
+
+
+def test_a_solo_pair_set_holds_one_agent_and_nothing_else():
+    """The baseline arm: no second agent, so nothing to deduce."""
+    from marlenv.flex_wm.egocentric import egocentric_pairs, patch_offsets
+
+    episode = synthetic_episode(frames=10, agents=3)
+    offsets = patch_offsets(9, 3)
+
+    both = egocentric_pairs(episode, offsets, ego=0)
+    alone = egocentric_pairs(episode, offsets, ego=0, others=False)
+
+    assert len(np.unique(both['agent'])) > 1, 'the fixture recovers nobody'
+    assert np.unique(alone['agent']).tolist() == [0]
+    # the observer's own record is untouched by dropping the others
+    own = both['agent'] == 0
+    for name in ('time', 'position', 'actions', 'acted'):
+        assert np.array_equal(both[name][own], alone[name]), name
+    assert alone['visible'].all(), 'the observer withholds nothing from itself'

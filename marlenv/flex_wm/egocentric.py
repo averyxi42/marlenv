@@ -140,7 +140,7 @@ def cardinal_from_step(before, after):
 
 
 def egocentric_pairs(episode, offsets, ego=None, rng=None, radius=4,
-                     patch=3):
+                     patch=3, others=True):
     """An episode as a flat pair set, ready for a batcher.
 
     The same reconstruction as :func:`egocentric_episode`, in the shape the
@@ -148,7 +148,7 @@ def egocentric_pairs(episode, offsets, ego=None, rng=None, radius=4,
     patch, by ``visible``, not by dropping the observation.
     """
     seen = egocentric_episode(episode, offsets, ego=ego, rng=rng,
-                              radius=radius, patch=patch)
+                              radius=radius, patch=patch, others=others)
     return {'observations': seen.observations, 'actions': seen.actions,
             'agent': seen.agent, 'time': seen.time, 'position': seen.position,
             'visible': seen.visible, 'acted': seen.acted,
@@ -156,7 +156,7 @@ def egocentric_pairs(episode, offsets, ego=None, rng=None, radius=4,
 
 
 def egocentric_episode(episode, offsets, ego=None, rng=None, radius=4,
-                       patch=3):
+                       patch=3, others=True):
     """Rebuild ``episode`` as one agent could have recorded it.
 
     episode a decoded episode, as :func:`marlenv.data.decode_episode` gives
@@ -165,6 +165,11 @@ def egocentric_episode(episode, offsets, ego=None, rng=None, radius=4,
     rng     for that choice
     radius  view radius, in cells
     patch   patch width, in cells
+    others  keep the agents the observer recovered. Setting it False
+            leaves one agent's record and nothing else, which is the
+            baseline the egocentric run has to beat: whatever a model
+            manages without ever being shown a second agent is not
+            something the second agent taught it
 
     Returns an :class:`EgoEpisode`. The observer's own pairs are complete;
     every other pair comes from a visit and is partial.
@@ -209,7 +214,7 @@ def egocentric_episode(episode, offsets, ego=None, rng=None, radius=4,
                 acted=position < len(own) - 1 or not ended))
         next_id += 1
 
-    for other in range(agents):
+    for other in range(agents) if others else ():
         if other == ego:
             continue
         seen = np.array([

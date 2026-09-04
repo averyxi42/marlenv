@@ -113,6 +113,49 @@ run, and it stops being able to spend it once the policy reaches its
 entropy floor. The `pull a/f` figure in the log is that ratio, measured
 rather than assumed.
 
+### Learning a multi-agent model from one agent's record
+
+Three runs, same architecture and same episodes, differing only in what
+each is allowed to see. The question is whether a model can learn multi
+agent dynamics from a single agent's account of them, deducing the rest.
+
+```bash
+# ceiling: every agent's record, nothing deduced
+python examples/train/train_flex_wam.py --components expert_nogradient explore_nogradient ...
+
+# the experiment: one agent's record, the others recovered while in view
+python examples/train/train_flex_wam.py --egocentric ...
+
+# baseline: one agent's record and nothing else
+python examples/train/train_flex_wam.py --solo ...
+```
+
+None of the three is fully observed. Every agent sees the same 9x9 window
+in all of them; what changes is how many records reach the model and how
+much of the rest it has to work out. The egocentric run keeps other agents
+only while their heads are in view, gives each visit a fresh identity, and
+marks what it could not see with noise rather than dropping it.
+
+The baseline is what makes the result readable. This architecture hands the
+model the geometry: positions are axial RoPE over time, row and column, so
+two agents' tokens carry their true spatial offset without anyone having to
+learn it. A model might therefore place agents consistently because the
+embedding says where they are, not because the data taught it. The solo run
+is never shown a second agent, so whatever multi-agent consistency it still
+produces is the geometry's doing and not the data's.
+
+Read it with a metric that measures agreement *between* agents rather than
+coherence of the stitched canvas: the canvas is assembled from dead
+reckoned poses, so it looks coherent for a solo model too. What separates
+them is whether two agents' generated views agree where they cover the same
+world cells at the same step -- the same overlap check
+`diagram_gen`/`examples/analysis` use on the real data, run on generated
+frames instead.
+
+A stronger version of this experiment would drop the geometric embedding
+for a learned one and make the model find the spatial relationship in the
+data. That is a separate run and is not set up here.
+
 ### Growing a trained model deeper
 
 Depth is what closed the gap to the single agent model, and it does not

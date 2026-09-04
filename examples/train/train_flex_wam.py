@@ -48,6 +48,10 @@ def parse_args():
     p.add_argument('--egocentric', action='store_true',
                    help='train on what one agent could have seen, rather '
                         'than on the whole board')
+    p.add_argument('--solo', action='store_true',
+                   help="one agent's record and nothing else; implies "
+                        '--egocentric. The baseline: what the architecture '
+                        'manages with no second agent at all')
     p.add_argument('--steps-per-epoch', type=int, default=None,
                    help='steps between fresh viewpoints, egocentric only; '
                         'defaults to one pass over the episodes')
@@ -162,7 +166,8 @@ def egocentric_batchers(datasets, weights, dropouts, args, device):
     offsets = patch_offsets(view, 3)
 
     def build(source, rng):
-        return egocentric_pairs(source, offsets, rng=rng, radius=view // 2)
+        return egocentric_pairs(source, offsets, rng=rng, radius=view // 2,
+                                others=not args.solo)
 
     order = np.random.default_rng(args.seed).permutation(len(sources))
     cut = max(int(len(order) * (1 - args.val_fraction)), 1)
@@ -182,12 +187,15 @@ def egocentric_batchers(datasets, weights, dropouts, args, device):
     tokens = pairs * batcher.episodes[0]['visible'].shape[1]
     print(f'  {len(sources)} episodes -> {cut} train, '
           f'{len(order) - cut} val, {pairs} pairs from one seat each, '
-          f'{seen / max(tokens, 1):.1%} of patches seen', flush=True)
+          f'{seen / max(tokens, 1):.1%} of patches seen'
+          f'{"  (solo: no other agent kept)" if args.solo else ""}',
+          flush=True)
     return batcher, validation, view
 
 
 def main():
     args = parse_args()
+    args.egocentric = args.egocentric or args.solo
     torch.manual_seed(args.seed)
     device = args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
 
