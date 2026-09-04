@@ -16,7 +16,8 @@ import torch
 import gymnasium as gym
 import marlenv  # noqa: F401
 from marlenv.flex_wm.model import load_flex_model
-from marlenv.flex_wm.runner import FlexRunner
+from marlenv.flex_wm.runner import (CachedFlexRunner,
+                                    FlexRunner)
 from marlenv.wm.data import to_model_input
 from marlenv.wm.showreel import (REWARD_DICT, Showreel, compose, save,
                                  world_views)
@@ -53,6 +54,10 @@ def parse_args():
     p.add_argument('--view-radius', type=int, default=4)
     p.add_argument('--obstacle-density', type=float, default=0.12)
     p.add_argument('--death-patience', type=int, default=3)
+    p.add_argument('--no-cache', dest='use_cache',
+                   action='store_false', default=True,
+                   help='recompute the window every pass instead of\n'
+                        'encoding each committed step once')
     p.add_argument('--device', default=None)
     return p.parse_args()
 
@@ -97,7 +102,9 @@ def main():
     base = env.unwrapped
 
     heads = np.array([s.head_coord for s in base.snakes], dtype=np.int64)
-    runner = FlexRunner(model, agents=list(range(args.num_agents)),
+    runner_class = (CachedFlexRunner if args.use_cache
+                    else FlexRunner)
+    runner = runner_class(model, agents=list(range(args.num_agents)),
                         positions=heads - heads[0], window=window,
                         device=device, death_patience=args.death_patience)
     runner.reset(torch.from_numpy(

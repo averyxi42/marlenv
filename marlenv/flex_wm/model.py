@@ -19,7 +19,7 @@ import torch.nn as nn
 from marlenv.flex_wm.attention import build_masks, parse_schedule
 from marlenv.flex_wm.pairs import token_attributes, token_coords
 from marlenv.wm.attention import attend  # noqa: F401  (kept in one place)
-from marlenv.wm.model import timestep_embedding
+from marlenv.wm.model import apply_rope, timestep_embedding
 from marlenv.wm.multiagent import MultiAgentWorldModel
 
 
@@ -111,6 +111,69 @@ class FlexWorldModel(MultiAgentWorldModel):
         frames = self.unpatchify(self.to_noise(grouped[:, :, :-1]))
         actions = self.action_out(grouped[:, :, -1])
         return frames, actions
+
+    # -------------------------------------------------------------- cached
+    def block_cached(self, block, layer, x, cos, sin, scope, cache, attrs,
+                     window, record):
+        """One block against the cache, at this block's own scope.
+
+        Reads before it writes: the cache returns everything it holds with
+        the new keys appended, so writing first would have the step attend
+        to itself twice.
+        """
+        attention = block.attn
+        batch, tokens, _ = x.shape
+        normed = block.norm1(x)
+        qkv = attention.qkv(normed).view(batch, tokens, 3, attention.heads,
+                                         attention.head_dim)
+        query, key, value = qkv.permute(2, 0, 3, 1, 4)
+        query, key = apply_rope(query, cos, sin), apply_rope(key, cos, sin)
+
+        keys, values = cache.read(layer, key, value, scope)
+        mask = cache.mask_for(scope, *attrs, window)
+        out = attend(query, keys, values, mask)
+        if record:
+            cache.write(layer, key, value)
+        x = x + attention.out(out.transpose(1, 2).reshape(batch, tokens, -1))
+        return x + block.mlp(block.norm2(x))
+
+    def forward_cached(self, pairs, noisy_frames, noisy_actions, frame_tau,
+                       action_tau, cache, window=None, record=False):
+        """Predict for one step's pairs, against a cache of earlier ones.
+
+        pairs         ``PairBatch`` of ``(1, p)``, only the new pairs
+        noisy_frames  ``(1, p, view, view, channels)``
+        noisy_actions ``(1, p, num_actions)``
+        frame_tau     ``(1, p)``
+        action_tau    ``(1, p)``
+        cache         ``ScopedCache`` holding the earlier steps
+        window        frames of history, or ``None``
+        record        append these tokens to the cache, which is what
+                      commits a step
+
+        Returns the same pair as :meth:`forward`, for the new pairs only.
+        """
+        device = noisy_frames.device
+        batch, count = pairs.batch, pairs.pairs
+
+        x = self.pair_tokens(pairs, noisy_frames, noisy_actions, frame_tau,
+                             action_tau)
+        x = x + self.type_embedding(self.token_types(batch, count, device))
+
+        attrs = token_attributes(pairs, self.tokens_per_frame)[:3]
+        cos, sin = self.rope(token_coords(pairs, self.patch_offsets(device)))
+
+        for layer, (block, scope) in enumerate(zip(self.blocks,
+                                                   self.schedule)):
+            x = self.block_cached(block, layer, x, cos, sin, scope, cache,
+                                  attrs, window, record)
+        if record:
+            cache.commit(*attrs)
+        x = self.norm(x)
+
+        grouped = x.reshape(batch, count, self.tokens_per_pair, self.dim)
+        frames = self.unpatchify(self.to_noise(grouped[:, :, :-1]))
+        return frames, self.action_out(grouped[:, :, -1])
 
 
 def load_flex_model(path, device='cpu', schedule=None):

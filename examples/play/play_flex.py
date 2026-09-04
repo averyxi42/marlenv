@@ -27,7 +27,8 @@ import marlenv  # noqa: F401
 from marlenv.core.palette import snap_to_palette
 from marlenv.core.snake import Direction
 from marlenv.flex_wm.model import load_flex_model
-from marlenv.flex_wm.runner import FlexRunner
+from marlenv.flex_wm.runner import (CachedFlexRunner,
+                                    FlexRunner)
 from marlenv.grading.compare import PALETTE_SNAKES, unrotate_view
 from marlenv.wm.canvas import CanvasIntegrator, make_pose
 from marlenv.wm.data import to_model_input, to_pixels
@@ -68,6 +69,10 @@ def parse_args():
     p.add_argument('--obstacle-density', type=float, default=0.12)
     p.add_argument('--record', default=None)
     p.add_argument('--headless', action='store_true')
+    p.add_argument('--no-cache', dest='use_cache',
+                   action='store_false', default=True,
+                   help='recompute the window every pass instead of\n'
+                        'encoding each committed step once')
     p.add_argument('--device', default=None)
     return p.parse_args()
 
@@ -90,7 +95,9 @@ class Session:
 
         heads = np.array([s.head_coord for s in base.snakes], dtype=np.int64)
         immortal = [args.agent] if args.immortal_player else None
-        self.runner = FlexRunner(
+        runner_class = (CachedFlexRunner if args.use_cache
+                        else FlexRunner)
+        self.runner = runner_class(
             model, agents=list(range(args.num_agents)),
             positions=heads - heads[0], window=window, device=device,
             death_patience=args.death_patience, immortal=immortal)

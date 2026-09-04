@@ -419,3 +419,144 @@ def test_the_window_bounds_the_history():
     assert runner.pairs.pairs <= 8, 'the window did not trim'
     span = runner.pairs.time.max() - runner.pairs.time.min()
     assert span < 8
+
+
+# ------------------------------------------------------------------ cache
+def slice_pairs(pairs, start, stop):
+    from marlenv.flex_wm.pairs import PairBatch
+
+    cut = lambda x: x[:, start:stop]
+    return PairBatch(observations=cut(pairs.observations),
+                     actions=cut(pairs.actions), agent=cut(pairs.agent),
+                     time=cut(pairs.time), position=cut(pairs.position))
+
+
+@pytest.mark.parametrize('schedule,depth',
+                         [('G', 3), ('AG', 4), ('FAG', 3),
+                          ('FAGFAGAAGAAG', 12)])
+def test_the_cache_agrees_with_recomputing_everything(schedule, depth):
+    """Two paths, one answer -- at every scope, not just the global one.
+
+    A frame-scope block reads nothing from the cache and an agent-scope
+    block reads only its own past, so this is where getting the scoping
+    wrong would show.
+    """
+    from marlenv.flex_wm.cache import ScopedCache
+
+    _, model = shapes(agents=3, depth=depth, schedule=schedule)
+    frames, actions, origins = sample(batch=1, steps=4, agents=3)
+    signal = actions_to_signal(actions, 4)
+    alive = torch.ones(*actions.shape, dtype=torch.bool)
+    pairs = pairs_from_arrays(frames, actions, origins, alive, model=model)
+    flat = lambda x: x.reshape(1, -1, *x.shape[3:])
+    frame_tau = torch.zeros(1, pairs.pairs)
+    action_tau = torch.zeros(1, pairs.pairs)
+
+    with torch.no_grad():
+        want_frames, want_actions = model(pairs, pairs.observations,
+                                          flat(signal), frame_tau,
+                                          action_tau)
+
+        cache = ScopedCache(len(model.blocks))
+        agents, got_frames, got_actions = 3, None, None
+        for step in range(4):
+            lo, hi = step * agents, (step + 1) * agents
+            got_frames, got_actions = model.forward_cached(
+                slice_pairs(pairs, lo, hi), pairs.observations[:, lo:hi],
+                flat(signal)[:, lo:hi], frame_tau[:, lo:hi],
+                action_tau[:, lo:hi], cache, record=True)
+
+    assert torch.allclose(got_frames, want_frames[:, -3:], atol=1e-5), (
+        (got_frames - want_frames[:, -3:]).abs().max().item())
+    assert torch.allclose(got_actions, want_actions[:, -3:], atol=1e-5)
+
+
+def test_a_frame_scope_block_never_reads_the_cache():
+    """Its reach is the observation it belongs to, so there is nothing to
+    read -- and that is where the saving comes from."""
+    from marlenv.flex_wm.cache import ScopedCache
+
+    cache = ScopedCache(layers=1)
+    key = torch.randn(1, 2, 5, 8)
+    cache.write(0, key, key)
+    cache.commit(torch.zeros(1, 5, dtype=torch.long),
+                 torch.zeros(1, 5, dtype=torch.long),
+                 torch.zeros(1, 5, dtype=torch.bool))
+
+    fresh = torch.randn(1, 2, 3, 8)
+    kept, _ = cache.read(0, fresh, fresh, FRAME)
+    assert kept.shape[2] == 3, 'frame scope pulled history in'
+    wider, _ = cache.read(0, fresh, fresh, GLOBAL)
+    assert wider.shape[2] == 8, 'global scope lost the cache'
+
+
+def test_the_cache_trims_by_frame():
+    from marlenv.flex_wm.cache import ScopedCache
+
+    cache = ScopedCache(layers=1)
+    for step in range(4):
+        key = torch.randn(1, 2, 2, 8)
+        cache.write(0, key, key)
+        cache.commit(torch.full((1, 2), step, dtype=torch.long),
+                     torch.zeros(1, 2, dtype=torch.long),
+                     torch.zeros(1, 2, dtype=torch.bool))
+    assert len(cache) == 8
+    cache.trim(oldest=2)
+    assert len(cache) == 4, 'trimming kept the wrong tokens'
+    assert int(cache.time.min()) == 2
+
+
+def test_both_runners_keep_the_same_books():
+    """Fed the same real play, the two must agree on state.
+
+    Not on generated pixels -- they draw different shaped noise, so their
+    random streams diverge and comparing samples would be comparing seeds.
+    What has to match is everything the cache is not allowed to change:
+    who is alive, where they are, and what history is held.
+    """
+    from marlenv.flex_wm.runner import CachedFlexRunner, FlexRunner
+
+    _, model = shapes(agents=3, depth=3, schedule='FAG')
+    torch.manual_seed(9)
+    start = torch.randn(1, 1, 3, 9, 9, 3).clamp(-1, 1)
+    steps = [(torch.tensor([0, 1, 2]),
+              torch.randn(1, 1, 3, 9, 9, 3).clamp(-1, 1)) for _ in range(4)]
+
+    books = []
+    for cls in (FlexRunner, CachedFlexRunner):
+        runner = cls(model, [0, 1, 2], [[0, 0], [4, 0], [0, 4]], window=8,
+                     device='cpu')
+        runner.reset(start.clone())
+        for actions, frames in steps:
+            runner.observe(actions, frames.clone())
+        books.append((runner.pairs.pairs, runner.living,
+                      runner.position.clone(), runner.time,
+                      runner.pairs.time.clone(),
+                      runner.pairs.agent.clone(),
+                      runner.pairs.actions.clone()))
+
+    plain, cached = books
+    assert plain[0] == cached[0], 'different amounts of history'
+    assert plain[1] == cached[1], 'different agents alive'
+    assert torch.equal(plain[2], cached[2]), 'positions drifted apart'
+    assert plain[3] == cached[3]
+    for left, right in zip(plain[4:], cached[4:]):
+        assert torch.equal(left, right), 'the recorded pairs differ'
+
+
+def test_the_cache_holds_what_was_committed():
+    """One entry per token of every finished pair, and none of the frontier."""
+    from marlenv.flex_wm.runner import CachedFlexRunner
+
+    _, model = shapes(agents=2, depth=3, schedule='FAG')
+    torch.manual_seed(10)
+    runner = CachedFlexRunner(model, [0, 1], [[0, 0], [3, 0]], window=8,
+                              device='cpu')
+    runner.reset(torch.randn(1, 1, 2, 9, 9, 3).clamp(-1, 1))
+    assert len(runner.cache) == 0, 'the frontier was cached before it closed'
+
+    runner.observe(torch.tensor([0, 1]),
+                   torch.randn(1, 1, 2, 9, 9, 3).clamp(-1, 1))
+    per_pair = model.tokens_per_pair
+    assert len(runner.cache) == 2 * per_pair, (
+        'a finished pair did not reach the cache')
