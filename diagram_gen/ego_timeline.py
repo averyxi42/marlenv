@@ -36,6 +36,9 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from datasets import load_from_disk
 
+from marlenv.core import render
+from marlenv.core.palette import (BODY_WHEEL, EMPTY_RGB, FRUIT_RGB,
+                                  WALL_RGB)
 from marlenv.core.render import draw_frame
 from marlenv.core.snake import Cell, Snake
 from marlenv.data import decode_episode
@@ -147,6 +150,23 @@ def owners(episode, pairs):
                 found[int(identity)] = candidate
                 break
     return found
+
+
+def match_palette():
+    """Draw the board in the hues a view uses, keeping the pixel art.
+
+    The game's renderer carries its own retro palette, so the same snake
+    comes out green in a view and yellow on the board -- exactly the
+    confusion this diagram cannot afford. Swapping the colours underneath
+    keeps the bevelled walls, eyes and rounded joints, and makes a snake
+    one colour wherever it appears.
+    """
+    render.SNAKE_COLORS = list(BODY_WHEEL)
+    render.WALL = WALL_RGB
+    render.WALL_LIGHT = render._shade(WALL_RGB, 1.45)
+    render.WALL_DARK = render._shade(WALL_RGB, 0.63)
+    render.BACKGROUND = (EMPTY_RGB, render._shade(EMPTY_RGB, 1.3))
+    render.FRUIT = FRUIT_RGB
 
 
 def board_image(episode, step, cell):
@@ -361,6 +381,7 @@ def compose(episode, ego, start, pairs, args, radius):
 
 def main():
     args = parse_args()
+    match_palette()
     dataset = load_from_disk(os.path.join(args.data_root, args.component))
     radius = int(dataset[0]['view_radius'])
     score, index, ego, start, episode = best_segment(dataset, args, radius)
