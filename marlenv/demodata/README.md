@@ -100,3 +100,68 @@ python examples/play/rollout_wam.py \
     --model marlenv/demodata/wam_deep/model_step8000.pt \
     --checkpoint marlenv/demodata/az_policy.pt
 ```
+
+
+## A bug worth knowing about: the move that kills
+
+The cardinal action for a step used to be read off the pose the agent ended
+up in. A snake that dies entering a cell has no resulting pose, so its
+final move was stored as an all-zero one-hot -- and `argmax` reads all
+zeros as index 0, which is **UP**.
+
+Every death in the affected data therefore claimed the snake had been
+heading north. A model trained on it learns that going up is what kills
+you, and dies more readily against the top wall. That is how it was
+eventually noticed, months of work after it was introduced.
+
+It was found once and fixed in the *datasets*, by `patch_aftermath.py`, and
+not in the collector that writes them. So it returned the moment fresh data
+was collected. Both are fixed now: `marlenv/data/collect.py` derives the
+action from the heading the agent had and the turn it chose, which is
+correct whether or not it survives arriving.
+
+### Checking a dataset for it
+
+A repaired set has a roughly uniform spread of fatal headings, because no
+direction is intrinsically more dangerous. All-north means the bug:
+
+```python
+import numpy as np
+from datasets import load_from_disk
+from marlenv.data import decode_episode
+
+deaths, valid = 0, 0
+for row in load_from_disk('marlenv/demodata/expert').select(range(60)):
+    episode = decode_episode(row)
+    alive, cardinal = episode['alive_mask'], episode['cardinal_actions']
+    for agent in range(alive.shape[1]):
+        living = np.flatnonzero(alive[:, agent])
+        if len(living) < 2:
+            continue
+        last = int(living[-1])
+        if last + 1 < alive.shape[0] and not alive[last + 1, agent]:
+            deaths += 1
+            valid += int(cardinal[last, agent].sum() == 1)
+print(f'fatal actions recorded: {valid / max(deaths, 1):.3f}')
+```
+
+A blank action is legitimate in exactly one place: the last frame of an
+episode that ran out of steps, where no action was ever taken. It is not
+legitimate at a death.
+
+### Repairing an existing set
+
+```bash
+python examples/data/patch_aftermath.py \
+    --components expert_nogradient explore_nogradient \
+    --background-gradient 0
+```
+
+Pass the collection settings the set was made with -- the script rebuilds
+frames from the recorded seed and refuses to write if its reconstruction
+does not match what is stored, so a mismatched gradient or noise level
+stops it rather than corrupting it.
+
+Both gradient-free sets have been repaired: 2011 and 4284 deaths, verified
+across every episode, with fatal headings spread evenly over the four
+directions.
