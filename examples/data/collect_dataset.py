@@ -1,6 +1,6 @@
 """Collect multi-agent episodes into a HuggingFace dataset.
 
-    python examples/collect_dataset.py --preset expert --episodes 1200 \
+    python examples/data/collect_dataset.py --preset expert --episodes 1200 \
         --checkpoint az_obs_latest.pt --workers 20
 
 Components are collected *separately*, one dataset per behaviour policy, so

@@ -1,6 +1,6 @@
 """Score next-frame prediction by cell type, for one model or several.
 
-    python examples/grade_frames.py --models a.pt b.pt --names old tuned
+    python examples/analysis/grade_frames.py --models a.pt b.pt --names old tuned
 
 Teacher forced: the history is real and clean, and only the final frame is
 generated. That separates what the model can do from how a rollout drifts.

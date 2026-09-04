@@ -1,7 +1,7 @@
 """Play the multi-agent world action model, or watch it play itself.
 
-    python examples/play_wam.py --model marlenv/demodata/wm_multi/model.pt
-    python examples/play_wam.py --model ... --autonomous --steps 200
+    python examples/play/play_wam.py --model marlenv/demodata/wm_multi/model.pt
+    python examples/play/play_wam.py --model ... --autonomous --steps 200
 
 You steer one snake; the others' actions are *sampled from the model*,
 which is what a world action model buys -- a plain world model cannot be

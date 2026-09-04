@@ -10,8 +10,8 @@ be undone.
 
 ```bash
 CK=az_obs_latest.pt
-python examples/collect_dataset.py --preset expert  --episodes 1200 --workers 20 --checkpoint $CK
-python examples/collect_dataset.py --preset explore --episodes 1500 --workers 20 --checkpoint $CK
+python examples/data/collect_dataset.py --preset expert  --episodes 1200 --workers 20 --checkpoint $CK
+python examples/data/collect_dataset.py --preset explore --episodes 1500 --workers 20 --checkpoint $CK
 ```
 
 Both on a fixed 15x15 board, 3 agents, view radius 4, 12% obstacles, with
@@ -61,7 +61,7 @@ episode = decode_episode(dataset[0])   # shapes and dtypes restored
 ## Grading rollouts
 
 ```bash
-python examples/grade_rollout.py --out marlenv/demodata
+python examples/analysis/grade_rollout.py --out marlenv/demodata
 ```
 
 Writes `.npz` rollouts and scores stand-in predictors, so the grading path
@@ -92,11 +92,11 @@ dominated by background and hides the part that is hard:
 | overall | 0.960 | 0.970 |
 
 ```bash
-python examples/grade_frames.py \
+python examples/analysis/grade_frames.py \
     --models marlenv/demodata/wm_ctx48/model.pt \
              marlenv/demodata/wam_deep/model_step8000.pt \
     --names single multi
-python examples/rollout_wam.py \
+python examples/play/rollout_wam.py \
     --model marlenv/demodata/wam_deep/model_step8000.pt \
     --checkpoint marlenv/demodata/az_policy.pt
 ```

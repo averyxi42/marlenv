@@ -1,6 +1,6 @@
 """Record a rollout and grade predictors against it.
 
-    python examples/grade_rollout.py --out marlenv/demodata
+    python examples/analysis/grade_rollout.py --out marlenv/demodata
 
 Runs the simulator with noise off over a fixed action sequence, saves the
 rollout, then scores two stand-in predictors so the harness can be checked

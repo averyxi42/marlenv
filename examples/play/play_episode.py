@@ -1,7 +1,7 @@
 """Play one episode with any of the solvers and render it to a GIF.
 
-    python examples/play_episode.py --policy rollout --num-snakes 3
-    python examples/play_episode.py --policy network --checkpoint az_best.pt
+    python examples/play/play_episode.py --policy rollout --num-snakes 3
+    python examples/play/play_episode.py --policy network --checkpoint az_best.pt
 
 Every snake is driven by a single search over joint actions that maximises
 the communal reward, so ``--communal`` is what changes the group's behaviour:

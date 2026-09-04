@@ -39,13 +39,13 @@ works from a fresh clone with nothing else collected or trained:
 
 ```bash
 # watch it play itself, and write a gif
-python examples/rollout_wam.py \
+python examples/play/rollout_wam.py \
     --model marlenv/demodata/wam_deep/model_step8000.pt \
     --checkpoint marlenv/demodata/az_policy.pt \
     --out showcase/selfplay.gif
 
 # play it yourself: arrows or WASD steer, the others are the model's
-python examples/play_wam.py \
+python examples/play/play_wam.py \
     --model marlenv/demodata/wam_deep/model_step8000.pt \
     --checkpoint marlenv/demodata/az_policy.pt
 ```
@@ -62,10 +62,21 @@ embedding, but the palette assigns a colour per snake and it has only ever
 seen three of them. Cycle the colours instead of introducing new ones:
 
 ```bash
-python examples/rollout_wam.py \
+python examples/play/rollout_wam.py \
     --model marlenv/demodata/wam_deep/model_step8000.pt \
     --num-agents 6 --snake-colors 3
 ```
+
+## Examples
+
+The scripts are grouped by what they are for:
+
+| folder | what is in it |
+| --- | --- |
+| `examples/data/` | collecting episodes, and repairing collected ones |
+| `examples/train/` | the search policy, and the world models |
+| `examples/play/` | playing, and recording rollouts to gif |
+| `examples/analysis/` | scoring predictions, and palette diagnostics |
 
 ## Training
 
@@ -73,9 +84,9 @@ The datasets are not in the repository -- a seed and the collection script
 regenerate them, and they are larger than the models. Collect first:
 
 ```bash
-python examples/collect_dataset.py --preset expert  --episodes 1200 \
+python examples/data/collect_dataset.py --preset expert  --episodes 1200 \
     --workers 20 --checkpoint marlenv/demodata/az_policy.pt
-python examples/collect_dataset.py --preset explore --episodes 1500 \
+python examples/data/collect_dataset.py --preset explore --episodes 1500 \
     --workers 20 --checkpoint marlenv/demodata/az_policy.pt
 ```
 
@@ -84,7 +95,7 @@ one, because an exploration episode's actions are partly noise and the
 policy head cannot fit noise:
 
 ```bash
-python examples/train_wm_multi.py --context 48 --steps 36000 \
+python examples/train/train_wm_multi.py --context 48 --steps 36000 \
     --depth 12 --action-weight 0.075 0.0 --action-dropout 0.5 1.0 \
     --out marlenv/demodata/wam_new
 ```
@@ -105,7 +116,7 @@ must be a whole multiple of the checkpoint's.
 
 ```bash
 # 12 blocks -> 24, carrying on from the trained model
-python examples/train_wm_multi.py --init \
+python examples/train/train_wm_multi.py --init \
     marlenv/demodata/wam_deep/model_step8000.pt \
     --depth 24 --steps 8000 --lr 1e-4 \
     --action-weight 0.025 0.0 --action-dropout 0.5 1.0 \
@@ -124,7 +135,7 @@ to check that it really does reproduce what it grew from.
 ### Measuring it
 
 ```bash
-python examples/grade_frames.py \
+python examples/analysis/grade_frames.py \
     --models marlenv/demodata/wm_ctx48/model.pt \
              marlenv/demodata/wam_deep/model_step8000.pt \
     --names single multi

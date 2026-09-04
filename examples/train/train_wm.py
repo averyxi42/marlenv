@@ -1,6 +1,6 @@
 """Train the single-agent world model on collected episodes.
 
-    python examples/train_wm.py --steps 8000 --components expert explore
+    python examples/train/train_wm.py --steps 8000 --components expert explore
 """
 import argparse
 import json

@@ -1,6 +1,6 @@
 """Train the multi-agent world action model.
 
-    python examples/train_wm_multi.py --steps 12000
+    python examples/train/train_wm_multi.py --steps 12000
 
 Frames and actions are diffused together, so the model is a policy and a
 dynamics model at once. That is what makes a multi-agent rollout possible:

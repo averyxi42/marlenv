@@ -1,6 +1,6 @@
 """Record the world action model playing itself, and write it out as a gif.
 
-    python examples/rollout_wam.py --model marlenv/demodata/wam_tuned/model.pt
+    python examples/play/rollout_wam.py --model marlenv/demodata/wam_tuned/model.pt
 
 Nobody steers. The rollout is bootstrapped with real steps from the
 simulator so the model starts from something in distribution, and every

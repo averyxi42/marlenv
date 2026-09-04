@@ -1,6 +1,6 @@
 """Render the palette reference sheet to showcase/palette.png.
 
-    python examples/palette_sheet.py
+    python examples/analysis/palette_sheet.py
 
 Shows every cell class as a swatch, and the background gradient both as a
 strip and as the four headings a snake can read off it. Regenerate this

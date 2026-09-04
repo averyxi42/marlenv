@@ -1,6 +1,6 @@
 """Train the factorised AlphaZero solver on a communal reward.
 
-    python examples/train_alphazero.py --objective sum --iterations 60
+    python examples/train/train_alphazero.py --objective sum --iterations 60
 
 Each iteration plays a few self-play episodes under the search, adds the
 positions to a replay buffer, and takes some gradient steps. Every snake is
