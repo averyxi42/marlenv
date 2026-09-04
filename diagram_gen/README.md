@@ -41,7 +41,8 @@ comparison a reader is worst at.
 python diagram_gen/pair_rollouts.py \
     --left diagrams/rollout_ego_step12000.gif \
     --right diagrams/rollout_nograd_step12000.gif \
-    --left-label "egocentric only" --right-label "full observability" \
+    --left-label "one agent's record" \
+    --right-label "every agent's record" \
     --out diagrams/rollout_pair.gif
 ```
 
