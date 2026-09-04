@@ -72,15 +72,7 @@ ARROW_BITS = ('.........',
               '.....##..',
               '.....#...',
               '.........')
-STICK_BITS = ('..#####..',
-              '..#####..',
-              '..#####..',
-              '...###...',
-              '...###...',
-              '..#####..',
-              '.#######.',
-              '#########',
-              '#########')
+STICK_TALL = 14
 # the arrow above points right; turn it clockwise to face anywhere else
 TURNS = {0: 3, 1: 0, 2: 1, 3: 2}
 
@@ -262,6 +254,14 @@ def stamp(draw, bits, left, top, colour):
                                 top + (r + 1) * UNIT - 1], fill=colour)
 
 
+def joystick(draw, cx, top, colour):
+    """A small pixel-art stick, the customary mark for an action."""
+    draw.rectangle([cx - 3, top, cx + 2, top + 4], fill=colour)
+    draw.rectangle([cx - 1, top + 4, cx, top + 8], fill=colour)
+    draw.rectangle([cx - 5, top + 8, cx + 4, top + 10], fill=colour)
+    draw.rectangle([cx - 7, top + 10, cx + 6, top + 13], fill=colour)
+
+
 def action_mark(draw, cx, top, action, colour, spacing):
     """A cardinal arrow with a stick beneath it, as one glyph.
 
@@ -271,8 +271,7 @@ def action_mark(draw, cx, top, action, colour, spacing):
     side = len(ARROW_BITS) * UNIT
     stamp(draw, turned(ARROW_BITS, TURNS[int(action)]), cx - side // 2, top,
           INK)
-    stamp(draw, STICK_BITS, cx - side // 2, top + side + spacing, colour)
-    return side
+    joystick(draw, cx, top + side + spacing, colour)
 
 
 def font_for(size):
@@ -381,10 +380,10 @@ def compose(episode, ego, start, pairs, args, radius):
                     # the pair reads as one mark, so it is the point between
                     # their centres that sits level with the tile
                     side, spacing = len(ARROW_BITS) * UNIT, 9
-                    # arrow centre sits at side/2 below the top, stick centre
-                    # at 1.5*side + spacing; halfway between is side + half
-                    # the spacing
-                    middle = side + spacing / 2
+                    # the two glyphs are different heights, so the point to
+                    # centre on is worked out from where each centre lands
+                    middle = (side / 2 + side + spacing
+                              + STICK_TALL / 2) / 2
                     action_mark(draw, spot[2] + gap / 2,
                                 spot[1] + tile / 2 - middle,
                                 int(pairs['actions'][row]), colour, spacing)
