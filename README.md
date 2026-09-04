@@ -156,6 +156,38 @@ A stronger version of this experiment would drop the geometric embedding
 for a learned one and make the model find the spatial relationship in the
 data. That is a separate run and is not set up here.
 
+#### What the three arms measured
+
+At 24000 steps each, on gradient-free data with the expert policy driving
+the bootstrap. Agreement is between two agents' dreamt views on the cells
+they both cover, over snake cells only, because background and wall are
+five sixths of any overlap and a model that draws less snake scores better
+on the total for that reason alone. The truth scored the same way returns
+1.0000 for all three, which is the control.
+
+| arm | agreement, snake cells | dreamt length vs true, steps 45-59 | lost | gained |
+| --- | --- | --- | --- | --- |
+| solo | 0.016 | 7.86 vs 7.90 | 0.413 | 0.114 |
+| egocentric | 0.800 | 11.64 vs 7.90 | 0.119 | 0.510 |
+| every record | 0.852 | 5.93 vs 7.90 | 0.321 | 0.025 |
+
+The first column answers the confound. The solo model has the same
+embedding, and so is handed the same true offset between any two agents,
+and it agrees with itself about snake cells 1.6% of the time -- one view
+draws a snake where the other draws bare board. The geometry does not
+produce inter-agent consistency; the 0.80 above it was learned.
+
+The other columns are why that is not a clean win. The three arms fail in
+three different directions: the egocentric model draws snake where there is
+none, the fully-recorded one erodes it, and the solo one does both at once
+in roughly equal measure -- which is why its dreamt length tracks the truth
+best of the three while its agreement is at the floor. Length is a marginal
+statistic and a model can get it right with no coherent joint structure at
+all. Reporting either number alone would have been misleading.
+
+None of the three saw a death frame, so none of this speaks to how they
+model dying.
+
 ### Growing a trained model deeper
 
 Depth is what closed the gap to the single agent model, and it does not
