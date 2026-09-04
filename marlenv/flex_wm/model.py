@@ -111,3 +111,30 @@ class FlexWorldModel(MultiAgentWorldModel):
         frames = self.unpatchify(self.to_noise(grouped[:, :, :-1]))
         actions = self.action_out(grouped[:, :, -1])
         return frames, actions
+
+
+def load_flex_model(path, device='cpu', schedule=None):
+    """Rebuild a model from a checkpoint, schedule included.
+
+    path     checkpoint written by the flex trainer, or by the older
+             multi-agent one
+    device   where to put it
+    schedule overrides what the checkpoint recorded
+
+    Returns ``(model, state)`` with the model in eval mode.
+
+    The schedule is not a tensor, so it cannot ride along in the state dict
+    without breaking the older checkpoints this is supposed to keep loading.
+    It travels beside the weights instead, and a checkpoint that has none is
+    read as all-global -- which is not a guess: a model trained before
+    scopes existed *is* a global one, so the default reproduces it.
+    """
+    state = torch.load(path, map_location='cpu', weights_only=False)
+    model = FlexWorldModel(
+        schedule=schedule or state.get('schedule', 'G'),
+        view=state.get('view', 9), num_actions=state.get('num_actions', 4),
+        frame=state.get('frame', 'world'), dim=state['dim'],
+        depth=state['depth'], heads=state['heads'],
+        align_coords=state.get('align_coords', True))
+    model.load_state_dict(state['model'])
+    return model.to(device).eval(), state

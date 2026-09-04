@@ -274,3 +274,60 @@ def test_removed_pairs_leave_no_tokens_behind():
     _, agent, _, valid = token_attributes(kept, tokens_per_frame=9)
     assert valid.all(), 'padding survived a full row'
     assert set(agent[0].tolist()) == {3, 5}
+
+
+# ----------------------------------------------------------------- loading
+def test_the_schedule_survives_a_checkpoint(tmp_path):
+    """It is not a tensor, so it has to be carried deliberately."""
+    from marlenv.flex_wm.model import load_flex_model
+
+    _, model = shapes(schedule='FAG')
+    path = tmp_path / 'model.pt'
+    torch.save({'model': model.state_dict(), 'view': 9, 'dim': 64,
+                'depth': 3, 'heads': 4, 'num_actions': 4, 'frame': 'world',
+                'schedule': 'FAG'}, path)
+
+    loaded, state = load_flex_model(path)
+    assert loaded.schedule == ['F', 'A', 'G'], loaded.schedule
+    assert state['schedule'] == 'FAG'
+    for name, value in model.state_dict().items():
+        assert torch.equal(loaded.state_dict()[name], value)
+
+
+def test_a_checkpoint_without_a_schedule_reads_as_global(tmp_path):
+    """An older model is a global one, so the default reproduces it."""
+    from marlenv.flex_wm.model import load_flex_model
+
+    old, _ = shapes()
+    path = tmp_path / 'old.pt'
+    torch.save({'model': old.state_dict(), 'view': 9, 'dim': 64, 'depth': 3,
+                'heads': 4, 'num_actions': 4, 'frame': 'world'}, path)
+
+    loaded, _ = load_flex_model(path)
+    assert loaded.schedule == ['G', 'G', 'G']
+
+
+def test_the_recorded_schedule_drives_the_masks(tmp_path):
+    """Loading must change what the model computes, not just an attribute."""
+    from marlenv.flex_wm.model import load_flex_model
+
+    _, model = shapes(schedule='FAG')
+    frames, actions, origins = sample()
+    signal = actions_to_signal(actions, 4)
+    alive = torch.ones(*actions.shape, dtype=torch.bool)
+    pairs = pairs_from_arrays(frames, actions, origins, alive, model=model)
+    flat = lambda x: x.reshape(x.shape[0], -1, *x.shape[3:])
+    tau = flat(torch.rand(*actions.shape))
+
+    def run(schedule):
+        path = tmp_path / f'{schedule}.pt'
+        torch.save({'model': model.state_dict(), 'view': 9, 'dim': 64,
+                    'depth': 3, 'heads': 4, 'num_actions': 4,
+                    'frame': 'world', 'schedule': schedule}, path)
+        loaded, _ = load_flex_model(path)
+        with torch.no_grad():
+            return loaded(pairs, pairs.observations, flat(signal), tau,
+                          tau)[0]
+
+    assert not torch.allclose(run('FAG'), run('G')), (
+        'the schedule was recorded but not used')
