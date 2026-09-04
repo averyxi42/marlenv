@@ -36,6 +36,22 @@ class FlexWorldModel(MultiAgentWorldModel):
     def tokens_per_pair(self):
         return self.tokens_per_frame + 1
 
+    def frame_tokens(self, frames, tau):
+        """Patch tokens, with a noise level per frame or per patch.
+
+        frames ``(b, p, view, view, channels)``
+        tau    ``(b, p)`` for a whole observation, or ``(b, p, tokens)``
+               when parts of it were seen and parts were not
+
+        A per-frame level is broadcast to every patch, which is what the
+        older callers pass and what they keep getting.
+        """
+        patches = self.to_tokens(self.patchify(frames))
+        level = self.tau_embedding(timestep_embedding(tau, self.dim))
+        if level.dim() == patches.dim():
+            return patches + level
+        return patches + level[:, :, None, :]
+
     # --------------------------------------------------------------- tokens
     def pair_tokens(self, pairs, frames, actions, frame_tau, action_tau):
         """Embed every pair into ``tokens_per_pair`` tokens, in pair order.

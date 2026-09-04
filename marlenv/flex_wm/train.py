@@ -75,6 +75,19 @@ def flex_training_loss(model, pairs, weight=None, dropout=None, window=None,
     action_tau = torch.where(pairs.acted, action_tau,
                              torch.ones_like(action_tau))
 
+    # the same statement one level finer. A patch nobody saw is unknown,
+    # not wrong: pinned at the top like an untrained observation, and kept
+    # out of the loss, because there is no truth to regress it against.
+    # With everything visible this is exactly ``trained`` again
+    view, tokens = pairs.observations.shape[2], model.tokens_per_frame
+    seen = pairs.cell_mask(tokens, view) & pairs.trained[:, :, None, None]
+    ones = torch.ones_like(frame_tau)
+    cell_tau = torch.where(seen, frame_tau[:, :, None, None],
+                           ones[:, :, None, None])
+    patch_tau = torch.where(
+        pairs.patch_mask(tokens) & pairs.trained[:, :, None],
+        frame_tau[:, :, None], ones[:, :, None])
+
     clean = actions_to_signal(pairs.actions, model.action_out.out_features)
     frame_noise = torch.randn(pairs.observations.shape, device=device,
                               generator=generator)
@@ -83,17 +96,19 @@ def flex_training_loss(model, pairs, weight=None, dropout=None, window=None,
 
     predicted_frames, predicted_actions = model(
         pairs,
-        add_noise(pairs.observations, frame_tau, frame_noise),
+        add_noise(pairs.observations, cell_tau, frame_noise),
         add_noise(clean, action_tau, action_noise),
-        frame_tau, action_tau, window=window)
+        patch_tau, action_tau, window=window)
 
-    frame_target = to_velocity(pairs.observations, frame_noise, frame_tau)
+    frame_target = to_velocity(pairs.observations, frame_noise, cell_tau)
     action_target = to_velocity(clean, action_noise, action_tau)
 
-    frame_error = ((predicted_frames - frame_target) ** 2).mean(
-        dim=(-3, -2, -1))
-    frame_mask = pairs.trained.float()
-    frame_loss = ((frame_error * frame_mask).sum()
+    # averaged over the cells that were seen, rather than per observation.
+    # Patches partition the view evenly, so with nothing masked the two
+    # give the same number
+    squared = ((predicted_frames - frame_target) ** 2).mean(dim=-1)
+    frame_mask = seen.float()
+    frame_loss = ((squared * frame_mask).sum()
                   / frame_mask.sum().clamp(min=1))
 
     action_error = ((predicted_actions - action_target) ** 2).mean(dim=-1)

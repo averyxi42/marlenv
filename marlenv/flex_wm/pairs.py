@@ -35,6 +35,14 @@ class PairBatch:
     valid         ``(b, p)`` real pair, as opposed to padding
     trained       ``(b, p)`` the frame is a target, defaults to ``valid``
     acted         ``(b, p)`` the action is a target, defaults to ``valid``
+    visible       ``(b, p, tokens)`` the patch was observed, defaults to
+                  all of them
+
+    ``trained`` and ``visible`` say the same thing at two granularities and
+    compose by conjunction: ``trained`` rules a whole observation in or out,
+    ``visible`` rules single patches of one out. An unseen patch is pinned
+    at the top of the noise schedule and kept out of the loss -- it exists,
+    at a known place, with unknown content and no truth to regress on.
     """
 
     observations: torch.Tensor
@@ -45,6 +53,7 @@ class PairBatch:
     valid: torch.Tensor = None
     trained: torch.Tensor = None
     acted: torch.Tensor = None
+    visible: torch.Tensor = None
 
     def __post_init__(self):
         shape = self.observations.shape[:2]
@@ -56,6 +65,9 @@ class PairBatch:
             self.trained = self.valid
         if self.acted is None:
             self.acted = self.valid
+        if self.visible is None:
+            # shaped lazily: the token count belongs to the model, not here
+            self.visible = None
 
     @property
     def batch(self):
@@ -65,10 +77,29 @@ class PairBatch:
     def pairs(self):
         return self.observations.shape[1]
 
+    def patch_mask(self, tokens):
+        """``(b, p, tokens)`` of which patches were observed."""
+        if self.visible is None:
+            return torch.ones(self.batch, self.pairs, tokens,
+                              dtype=torch.bool,
+                              device=self.observations.device)
+        return self.visible
+
+    def cell_mask(self, tokens, view):
+        """``(b, p, view, view)``: a patch's flag spread over its cells."""
+        grid = int(round(tokens ** 0.5))
+        patch = view // grid
+        flags = self.patch_mask(tokens).reshape(self.batch, self.pairs,
+                                                grid, grid)
+        return flags.repeat_interleave(patch, dim=2).repeat_interleave(
+            patch, dim=3)
+
     def to(self, device):
-        moved = {name: getattr(self, name).to(device)
-                 for name in ('observations', 'actions', 'agent', 'time',
-                              'position', 'valid', 'trained', 'acted')}
+        names = ('observations', 'actions', 'agent', 'time', 'position',
+                 'valid', 'trained', 'acted', 'visible')
+        moved = {name: (None if getattr(self, name) is None
+                        else getattr(self, name).to(device))
+                 for name in names}
         return PairBatch(**moved)
 
 

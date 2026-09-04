@@ -670,3 +670,220 @@ def test_every_package_imports_on_its_own():
         assert done.returncode == 0, (
             f'{module} does not import on its own:\n'
             + done.stderr.strip().splitlines()[-1])
+
+
+# ------------------------------------------------------------- visibility
+def test_partial_observation_changes_nothing_when_all_is_visible():
+    """The refinement has to be invisible until it is used.
+
+    ``visible`` says per patch what ``trained`` says per observation, so
+    with every patch visible the loss must be the number it was before --
+    identically, not approximately. Patches partition the view evenly, so
+    averaging within patches and then across them is the same average.
+    """
+    from marlenv.flex_wm.pairs import PairBatch
+    from marlenv.flex_wm.train import flex_training_loss
+
+    _, model = shapes(schedule='FAG')
+    frames, actions, origins = sample()
+    alive = torch.ones(*actions.shape, dtype=torch.bool)
+    pairs = pairs_from_arrays(frames, actions, origins, alive, model=model)
+
+    tokens = model.tokens_per_frame
+    spelled = PairBatch(
+        observations=pairs.observations, actions=pairs.actions,
+        agent=pairs.agent, time=pairs.time, position=pairs.position,
+        valid=pairs.valid, trained=pairs.trained, acted=pairs.acted,
+        visible=torch.ones(pairs.batch, pairs.pairs, tokens,
+                           dtype=torch.bool))
+
+    losses = []
+    for batch in (pairs, spelled):
+        generator = torch.Generator().manual_seed(0)
+        losses.append([float(v.detach()) for v in
+                       flex_training_loss(model, batch, generator=generator)])
+    assert losses[0] == pytest.approx(losses[1], rel=1e-9), (
+        'spelling out full visibility changed the answer')
+
+
+def test_an_unseen_patch_cannot_reach_the_loss():
+    """Not merely down-weighted: its content must not matter at all."""
+    from marlenv.flex_wm.pairs import PairBatch
+    from marlenv.flex_wm.train import flex_training_loss
+
+    _, model = shapes(schedule='FAG')
+    frames, actions, origins = sample()
+    alive = torch.ones(*actions.shape, dtype=torch.bool)
+    base = pairs_from_arrays(frames, actions, origins, alive, model=model)
+
+    tokens = model.tokens_per_frame
+    visible = torch.ones(base.batch, base.pairs, tokens, dtype=torch.bool)
+    visible[:, :, 0] = False                   # the first patch is unseen
+
+    def build(observations):
+        return PairBatch(
+            observations=observations, actions=base.actions,
+            agent=base.agent, time=base.time, position=base.position,
+            valid=base.valid, trained=base.trained, acted=base.acted,
+            visible=visible)
+
+    view = base.observations.shape[2]
+    grid = int(round(tokens ** 0.5))
+    patch = view // grid
+    tampered = base.observations.clone()
+    tampered[:, :, :patch, :patch] = 0.9        # only the unseen patch
+
+    losses = []
+    for observations in (base.observations, tampered):
+        generator = torch.Generator().manual_seed(1)
+        losses.append(float(flex_training_loss(
+            model, build(observations), generator=generator)[1].detach()))
+    assert losses[0] == pytest.approx(losses[1], rel=1e-6), (
+        'an unseen patch reached the frame loss')
+
+
+def test_cell_mask_spreads_a_patch_over_its_cells():
+    from marlenv.flex_wm.pairs import PairBatch
+
+    pairs = PairBatch(observations=torch.zeros(1, 1, 9, 9, 3),
+                      actions=torch.zeros(1, 1, dtype=torch.long),
+                      agent=torch.zeros(1, 1, dtype=torch.long),
+                      time=torch.zeros(1, 1, dtype=torch.long),
+                      position=torch.zeros(1, 1, 2, dtype=torch.long),
+                      visible=torch.tensor([[[True, False, True,
+                                              True, True, True,
+                                              True, True, True]]]))
+    cells = pairs.cell_mask(9, 9)[0, 0]
+    assert cells.shape == (9, 9)
+    assert cells[:3, :3].all(), 'the first patch should be visible'
+    assert not cells[:3, 3:6].any(), 'the second patch should not be'
+    assert cells[:3, 6:].all()
+    assert cells[3:].all(), 'later rows were untouched'
+
+
+# ------------------------------------------------------------- egocentric
+def test_a_visit_yields_one_fewer_action_than_observations():
+    """An action is a difference of positions, so the last one is missing."""
+    from marlenv.flex_wm.egocentric import visible_runs
+
+    assert visible_runs([0, 1, 1, 1, 0, 1, 1, 0]) == [(1, 4), (5, 7)]
+    # a single glimpse teaches nothing about behaviour and is dropped
+    assert visible_runs([1, 0, 1, 0, 1]) == []
+    assert visible_runs([1, 1]) == [(0, 2)]
+    assert visible_runs([0, 0, 1, 1, 1]) == [(2, 5)]
+
+
+def test_a_patch_counts_only_when_all_of_it_was_seen():
+    """Half a patch is not a patch: the token carries the whole block."""
+    from marlenv.flex_wm.egocentric import patch_visibility
+
+    offsets = np.array([[-3, 0], [0, 0], [3, 0]])
+    # watcher and target on the same cell: everything is inside
+    assert patch_visibility((0, 0), (0, 0), offsets, radius=4,
+                            patch=3).all()
+    # slide the target away and the far patch leaves the watcher's view
+    seen = patch_visibility((0, 0), (2, 0), offsets, radius=4, patch=3)
+    assert seen.tolist() == [True, True, False]
+
+
+def test_each_visit_gets_an_identity_of_its_own():
+    """Nothing survives an absence; a returning snake is a new agent."""
+    from marlenv.flex_wm.egocentric import egocentric_episode
+
+    frames, agents, view = 12, 2, 9
+    poses = np.zeros((frames, agents, 3), np.int64)
+    alive = np.ones((frames, agents), bool)
+    cardinal = np.zeros((frames, agents, 4), np.int64)
+    cardinal[..., 1] = 1
+    poses[:, 0] = (5, 5, 1)
+    # the other snake is near, then far, then near again
+    for t in range(frames):
+        poses[t, 1] = (5, 6, 1) if t < 4 or t >= 8 else (5, 40, 1)
+    episode = {'alive_mask': alive, 'poses': poses,
+               'observations': np.zeros((frames, agents, view, view, 3),
+                                        np.uint8),
+               'cardinal_actions': cardinal}
+
+    offsets = np.array([[r, c] for r in (-3, 0, 3) for c in (-3, 0, 3)])
+    ego = egocentric_episode(episode, offsets, ego=0, radius=4)
+
+    others = sorted(set(ego.agent[ego.agent != ego.agent[0]].tolist()))
+    assert len(others) == 2, 'the two visits were treated as one agent'
+    for identity in others:
+        rows = ego.agent == identity
+        assert ego.acted[rows].sum() == rows.sum() - 1, (
+            'a visit should give one fewer action than observations')
+
+
+def test_the_observer_sees_all_of_its_own_view():
+    from marlenv.flex_wm.egocentric import egocentric_episode
+
+    frames, agents, view = 6, 2, 9
+    poses = np.zeros((frames, agents, 3), np.int64)
+    poses[:, 0] = (5, 5, 1)
+    poses[:, 1] = (40, 40, 1)          # never in view
+    alive = np.ones((frames, agents), bool)
+    cardinal = np.zeros((frames, agents, 4), np.int64)
+    cardinal[..., 1] = 1
+    episode = {'alive_mask': alive, 'poses': poses,
+               'observations': np.zeros((frames, agents, view, view, 3),
+                                        np.uint8),
+               'cardinal_actions': cardinal}
+    offsets = np.array([[r, c] for r in (-3, 0, 3) for c in (-3, 0, 3)])
+    ego = egocentric_episode(episode, offsets, ego=0, radius=4)
+
+    assert ego.visible.all(), 'the observer should see all of its own view'
+    assert len(set(ego.agent.tolist())) == 1, 'nobody else was visible'
+    assert ego.acted[:-1].all() and not ego.acted[-1]
+
+
+def test_two_agents_agree_on_what_they_both_see():
+    """The premise of the whole reconstruction, stated as a test.
+
+    An observed agent's view is copied from the record rather than
+    re-rendered, so it is only usable if both agents' pictures of a shared
+    cell are the same picture. They are -- once both are turned north-up,
+    since the record keeps each in its own head frame.
+    """
+    import gymnasium as gym
+    import marlenv  # noqa: F401
+    from marlenv.flex_wm.egocentric import head_in_view
+    from marlenv.grading.compare import unrotate_view
+    from marlenv.wm.model import HEADINGS
+
+    env = gym.make('Snake-v1', height=15, width=15, num_snakes=3,
+                   num_fruits=4, view_radius=4, observation_noise=2.0,
+                   snake_noise_sigma=8.0, background_gradient=0.0,
+                   disable_env_checker=True)
+    env.reset(seed=3)
+    base = env.unwrapped
+    radius = 4
+
+    checked = 0
+    for _ in range(20):
+        views = base.egocentric_rgb()
+        upright = [unrotate_view(view, snake.direction)
+                   for view, snake in zip(views, base.snakes)]
+        for a, first in enumerate(base.snakes):
+            for b, second in enumerate(base.snakes):
+                if b <= a or not (first.alive and second.alive):
+                    continue
+                here = np.array(first.head_coord)
+                there = np.array(second.head_coord)
+                if not head_in_view(here, there, radius):
+                    continue
+                shift = there - here
+                for dr in range(-radius, radius + 1):
+                    for dc in range(-radius, radius + 1):
+                        # the same world cell, seen from the other head
+                        row, col = dr - shift[0], dc - shift[1]
+                        if abs(row) > radius or abs(col) > radius:
+                            continue
+                        checked += 1
+                        assert np.array_equal(
+                            upright[a][dr + radius, dc + radius],
+                            upright[b][row + radius, col + radius]), (
+                            'two agents disagree about one world cell')
+        env.step([0] * base.num_snakes)
+
+    assert checked > 100, f'only {checked} overlapping cells were compared'
