@@ -887,3 +887,146 @@ def test_two_agents_agree_on_what_they_both_see():
         env.step([0] * base.num_snakes)
 
     assert checked > 100, f'only {checked} overlapping cells were compared'
+
+
+# ------------------------------------------------------- one batcher, both
+def rectangular_set(steps=6, agents=2, view=9, tokens=9, seed=0):
+    from marlenv.flex_wm.batch import flatten_episode
+
+    rng = np.random.default_rng(seed)
+    alive = np.ones((steps, agents), bool)
+    alive[steps - 2:, 1] = False              # one agent leaves early
+    return flatten_episode(
+        observations=rng.integers(0, 256, (steps, agents, view, view, 3),
+                                  dtype=np.uint8),
+        actions=rng.integers(0, 4, (steps, agents)),
+        alive=alive, trained=alive,
+        positions=rng.integers(0, 9, (steps, agents, 2)),
+        tokens=tokens)
+
+
+def test_one_batcher_serves_both_kinds_of_episode():
+    """A rectangle and a set of visits should take the same path.
+
+    The point of pairs is that an episode with a moving agent count is not
+    a special case. A batcher that crops rectangles and converts at the end
+    cannot express one; a batcher that crops pairs does not notice.
+    """
+    from marlenv.flex_wm.batch import PairSetBatcher
+    from marlenv.flex_wm.egocentric import egocentric_episode
+
+    offsets = np.array([[r, c] for r in (-3, 0, 3) for c in (-3, 0, 3)])
+    frames, agents, view = 14, 2, 9
+    poses = np.zeros((frames, agents, 3), np.int64)
+    poses[:, 0] = (5, 5, 1)
+    for t in range(frames):
+        poses[t, 1] = (5, 6, 1) if t < 5 or t >= 9 else (5, 40, 1)
+    cardinal = np.zeros((frames, agents, 4), np.int64)
+    cardinal[..., 1] = 1
+    ego = egocentric_episode(
+        {'alive_mask': np.ones((frames, agents), bool), 'poses': poses,
+         'observations': np.zeros((frames, agents, view, view, 3), np.uint8),
+         'cardinal_actions': cardinal}, offsets, ego=0, radius=4)
+
+    ragged = {'observations': ego.observations, 'actions': ego.actions,
+              'agent': ego.agent, 'time': ego.time,
+              'position': ego.position, 'visible': ego.visible,
+              'acted': ego.acted, 'trained': np.ones(len(ego), bool)}
+
+    for name, episodes in (('rectangular', [rectangular_set()]),
+                           ('egocentric', [ragged]),
+                           ('mixed', [rectangular_set(), ragged])):
+        batcher = PairSetBatcher(episodes, context=6, seed=0)
+        pairs, weight, dropout = batcher.batch(4)
+        assert pairs.batch == 4, name
+        assert pairs.visible.shape[:2] == pairs.observations.shape[:2], name
+        assert pairs.valid.any(), name
+        # padding must not be mistaken for a real identity
+        assert (pairs.agent[~pairs.valid] == -1).all(), name
+
+
+def test_a_crop_keeps_only_its_window():
+    from marlenv.flex_wm.batch import PairSetBatcher
+
+    batcher = PairSetBatcher([rectangular_set(steps=20)], context=5, seed=3)
+    for _ in range(8):
+        crop = batcher.crop(0)
+        if len(crop['time']):
+            assert crop['time'].min() >= 0
+            assert crop['time'].max() < 5, 'a crop reached past its window'
+
+
+def test_the_flat_set_drops_what_was_never_alive():
+    from marlenv.flex_wm.batch import flatten_episode
+
+    steps, agents = 5, 2
+    alive = np.ones((steps, agents), bool)
+    alive[3:, 1] = False
+    flat = flatten_episode(
+        observations=np.zeros((steps, agents, 9, 9, 3), np.uint8),
+        actions=np.zeros((steps, agents), np.int64), alive=alive,
+        trained=alive, positions=np.zeros((steps, agents, 2), np.int64),
+        tokens=9)
+    assert len(flat['time']) == int(alive.sum())
+    assert flat['visible'].shape == (int(alive.sum()), 9)
+
+
+def test_a_patch_marked_visible_is_one_the_observer_could_reconstruct():
+    """The claim `visible` makes, checked against the world.
+
+    Not just that the arithmetic is self consistent: for every patch the
+    reconstruction keeps, all nine of its cells must be inside the
+    observer's own view and hold the pixels the observer sees there. Both
+    views are north-up, so a patch offset is a world offset -- if that
+    rotation were wrong this is where it would show.
+    """
+    import gymnasium as gym
+    import marlenv  # noqa: F401
+    from marlenv.flex_wm.egocentric import head_in_view, patch_visibility
+    from marlenv.grading.compare import unrotate_view
+
+    env = gym.make('Snake-v1', height=15, width=15, num_snakes=3,
+                   num_fruits=4, view_radius=4, observation_noise=2.0,
+                   snake_noise_sigma=8.0, background_gradient=0.0,
+                   disable_env_checker=True)
+    env.reset(seed=11)
+    base = env.unwrapped
+    radius, patch = 4, 3
+    offsets = np.array([[r, c] for r in (-3, 0, 3) for c in (-3, 0, 3)])
+
+    checked = 0
+    for _ in range(25):
+        upright = [unrotate_view(view, snake.direction) for view, snake
+                   in zip(base.egocentric_rgb(), base.snakes)]
+        for ego, watcher in enumerate(base.snakes):
+            for other, target in enumerate(base.snakes):
+                if other == ego or not (watcher.alive and target.alive):
+                    continue
+                here = np.array(watcher.head_coord)
+                there = np.array(target.head_coord)
+                if not head_in_view(here, there, radius):
+                    continue
+                seen = patch_visibility(here, there, offsets, radius, patch)
+                for index, offset in enumerate(offsets):
+                    if not seen[index]:
+                        continue
+                    for dr in (-1, 0, 1):
+                        for dc in (-1, 0, 1):
+                            # the cell, in the observed agent's own view
+                            row = offset[0] + dr
+                            col = offset[1] + dc
+                            # and the same world cell in the observer's
+                            world = there + (row, col)
+                            mine = world - here
+                            assert abs(mine[0]) <= radius, 'outside the view'
+                            assert abs(mine[1]) <= radius, 'outside the view'
+                            checked += 1
+                            assert np.array_equal(
+                                upright[other][row + radius, col + radius],
+                                upright[ego][mine[0] + radius,
+                                             mine[1] + radius]), (
+                                'a patch called visible holds pixels the '
+                                'observer does not see')
+        env.step([0] * base.num_snakes)
+
+    assert checked > 200, f'only {checked} cells were compared'
