@@ -15,8 +15,17 @@ comes back is a new agent. Every identity must therefore cover exactly one
 unbroken stretch of time. An identity with a gap in it is the observer
 holding on to something it could not have known.
 
-Both are checked against visibility recomputed from the recorded poses,
-rather than against the reconstruction's own idea of what was visible.
+**Deductions.** Every action attributed to a recovered agent has to follow
+from two observations of it. One that does not -- because the step between
+them was not a single cardinal move, or because the agent died and the move
+that killed it was never seen -- must not be trained, or the model is being
+handed a label rather than a deduction.
+
+**Patches.** A patch marked seen has to lie inside the observer's view.
+Marking too few only wastes signal; marking too many is a leak.
+
+All of it is checked against the recorded poses, recomputed here, rather
+than against the reconstruction's own account of what it saw.
 """
 import argparse
 import os
@@ -73,6 +82,62 @@ def truly_visible(episode, ego, radius):
     return runs
 
 
+def leaks(episode, pairs, ego, radius=4, patch=3, offsets=None):
+    """Count labels the observer could not have worked out for itself."""
+    alive, poses = episode['alive_mask'], episode['poses']
+    onehot = episode['cardinal_actions']
+    half = patch // 2
+    counts = {'undeducible action': 0, 'action at a death': 0,
+              'blank observer action': 0, 'patch seen out of view': 0,
+              'patch in view called unseen': 0}
+
+    # which source agent each identity is, by where its head was
+    for identity in np.unique(pairs['agent']):
+        rows = np.flatnonzero(pairs['agent'] == identity)
+        rows = rows[np.argsort(pairs['time'][rows])]
+        times = pairs['time'][rows]
+        who = None
+        for candidate in range(alive.shape[1]):
+            if np.array_equal(poses[times, candidate, :2],
+                              pairs['position'][rows]):
+                who = candidate
+                break
+        if who is None:
+            counts['undeducible action'] += len(rows)
+            continue
+
+        for index, row in enumerate(rows):
+            if not pairs['acted'][row]:
+                continue
+            step = int(times[index])
+            if who == ego:
+                # the observer knows its own move, including a fatal one,
+                # but a blank one-hot is not a move at all
+                if onehot[step, who].sum() != 1:
+                    counts['blank observer action'] += 1
+                continue
+            # a recovered agent's move is a difference between two sightings
+            if step + 1 >= alive.shape[0] or not alive[step + 1, who]:
+                counts['action at a death'] += 1
+                continue
+            delta = tuple(poses[step + 1, who, :2] - poses[step, who, :2])
+            if delta not in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                counts['undeducible action'] += 1
+
+        if offsets is None:
+            continue
+        for index, row in enumerate(rows):
+            step = int(times[index])
+            centres = poses[step, who, :2] + offsets
+            inside = np.all(
+                np.abs(centres - poses[step, ego, :2]) + half <= radius,
+                axis=-1)
+            said = pairs['visible'][row]
+            counts['patch seen out of view'] += int((said & ~inside).sum())
+            counts['patch in view called unseen'] += int((~said & inside).sum())
+    return counts
+
+
 def histogram(lengths, width=48):
     """A text histogram over integer lengths."""
     if not lengths:
@@ -93,7 +158,7 @@ def main():
     offsets = patch_offsets(9, 3)
     rng = np.random.default_rng(args.seed)
 
-    own_lengths, other_lengths = [], []
+    own_lengths, other_lengths, leaked = [], [], {}
     episodes = gaps = reused = short = 0
     found = expected = 0
 
@@ -132,6 +197,9 @@ def main():
                         short += 1
 
             expected += truly_visible(source, ego, radius=4)
+            for key, value in leaks(source, pairs, ego,
+                                    offsets=offsets).items():
+                leaked[key] = leaked.get(key, 0) + value
 
     print(f'{episodes} episodes')
     print(f'\nobserver segment lengths ({len(own_lengths)} segments, '
@@ -148,6 +216,9 @@ def main():
     print(f'recovered segments shorter than two steps    {short}')
     print(f'recovered segments   {found}   visible runs in the poses  '
           f'{expected}')
+    print()
+    for key, value in sorted(leaked.items()):
+        print(f'{key:32s} {value}')
 
 
 if __name__ == '__main__':

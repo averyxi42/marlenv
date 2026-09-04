@@ -1258,3 +1258,45 @@ def test_no_identity_covers_a_gap_in_time():
         assert len(set(times.tolist())) == len(times), 'a time repeated'
         assert np.all(np.diff(times) == 1), (
             f'identity {identity} spans a gap it could not have seen across')
+
+
+def test_an_unseen_patch_reaches_neither_the_loss_nor_the_input():
+    """What the observer could not see must not affect training at all.
+
+    Both directions matter. An unseen patch must not be a target, or the
+    model is scored on what it was never shown; and it must not reach the
+    input either, or the pixels leak in through the noised observation
+    however carefully the loss is masked.
+    """
+    from marlenv.flex_wm.train import flex_training_loss
+
+    _, model = shapes(schedule='FAG')
+    frames, actions, origins = sample()
+    alive = torch.ones(*actions.shape, dtype=torch.bool)
+    pairs = pairs_from_arrays(frames, actions, origins, alive, model=model)
+
+    tokens = model.tokens_per_frame
+    hidden = torch.ones(pairs.observations.shape[:2] + (tokens,),
+                        dtype=torch.bool)
+    hidden[:, :, : tokens // 2] = False       # first half unseen
+    pairs.visible = hidden
+
+    def loss_of(observations):
+        pairs.observations = observations
+        generator = torch.Generator().manual_seed(0)
+        total, _, _ = flex_training_loss(model, pairs, window=3,
+                                         generator=generator)
+        return float(total.detach())
+
+    original = pairs.observations.clone()
+    before = loss_of(original)
+
+    view = original.shape[-2]
+    unseen = ~pairs.cell_mask(tokens, view)
+    scrambled = original.clone()
+    scrambled[unseen.unsqueeze(-1).expand_as(scrambled)] = -1.0
+    after = loss_of(scrambled)
+
+    assert (original != scrambled).any(), 'nothing was actually changed'
+    assert before == pytest.approx(after, abs=1e-6), (
+        f'unseen pixels moved the loss: {before} vs {after}')
