@@ -126,3 +126,75 @@ class CachedRunner:
 
         self._commit_frame(frame)
         return frame
+
+
+class SingleAgentAdapter:
+    """A single agent runner behind the multi agent runner's interface.
+
+    The single agent model has no notion of other agents, so measuring it
+    beside the multi agent ones means feeding it one viewpoint and letting
+    the rest of the joint action pass by. Everything it is shown -- one
+    view, one cardinal action per step -- is what it was trained on; only
+    the shape of the call changes.
+    """
+
+    def __init__(self, model, agent=0, window=None, device=None):
+        self.model = model
+        self.agent = agent
+        self.window = window
+        self.device = device or next(model.parameters()).device
+        self.runner = CachedRunner(model, window=window, device=self.device)
+        self.latest = None
+        self.slots = None
+
+    def _mine(self, frames):
+        """The viewpoint this model actually sees, ``(1, 1, v, v, c)``."""
+        return frames[:, :, self.agent]
+
+    def reset(self, frames):
+        self.slots = frames.shape[2]
+        self.latest = frames.clone()
+        self.runner.reset(self._mine(frames))
+
+    @property
+    def living(self):
+        return [self.agent]
+
+    @property
+    def alive(self):
+        flags = torch.zeros(1, 1, self.slots, dtype=torch.bool,
+                            device=self.device)
+        flags[0, 0, self.agent] = True
+        return flags
+
+    @property
+    def frames(self):
+        return self.latest
+
+    def observe(self, actions, frames, live=None):
+        """Absorb one real step, by the route the interactive player uses."""
+        action = int(actions[self.agent])
+        self.runner._commit_action(action)
+        self.runner._advance(action)
+        self.runner.time += 1
+        self.runner.cache.trim(None if self.window is None
+                               else self.window - 1)
+        self.runner._commit_frame(self._mine(frames))
+        self.latest = frames.clone()
+
+    def step(self, fixed=None, denoise_steps=16, action_steps=None,
+             generator=None):
+        """Generate the next view. The other agents' actions do not apply.
+
+        ``action_steps`` is accepted and ignored: this model is told its
+        action rather than deciding it, so there is nothing to sample.
+        """
+        if not fixed or self.agent not in fixed:
+            raise ValueError('the single agent model must be given its '
+                             'action; it does not choose one')
+        frame = self.runner.step(int(fixed[self.agent]),
+                                 denoise_steps=denoise_steps,
+                                 generator=generator)
+        self.latest = self.latest.clone()
+        self.latest[0, 0, self.agent] = frame[0, 0]
+        return torch.tensor([fixed[self.agent]], device=self.device), frame

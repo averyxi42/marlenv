@@ -587,3 +587,65 @@ def test_reporting_the_newest_frames_does_not_scan_the_history():
         'the reported frames are not the newest ones')
     # held rather than derived: no dependence on how much history there is
     assert runner.frames is runner.latest
+
+
+# ---------------------------------------------------------------- ratchet
+def test_the_ratchet_tally_separates_losing_from_gaining():
+    """The asymmetry is the measurement; a total would hide it.
+
+    Two models can drop the same number of cells and behave completely
+    differently in a rollout: one that also adds cells wanders around the
+    right length, one that never does can only decay.
+    """
+    from marlenv.core.snake import Cell
+    from marlenv.grading.ratchet import Tally, own_length, snake_cells
+
+    truth = np.zeros((5, 5), dtype=np.int64)
+    truth[2, 2] = Cell.HEAD.value            # the viewer's own head
+    truth[2, 3] = Cell.BODY.value
+    truth[2, 4] = Cell.TAIL.value
+    assert own_length(truth) == 3
+    assert snake_cells(truth).sum() == 3
+
+    shed = truth.copy(); shed[2, 4] = 0      # lost the tail
+    grew = truth.copy(); grew[3, 3] = Cell.BODY.value   # invented one
+
+    tally = Tally(steps=2)
+    tally.add(0, truth, shed)
+    tally.add(1, truth, grew)
+    assert tally.lost.tolist() == [1.0, 0.0]
+    assert tally.gained.tolist() == [0.0, 1.0]
+    assert tally.dreamt.tolist() == [2.0, 4.0]
+
+
+def test_own_length_counts_only_the_viewer_s_snake():
+    """The centre is the viewer's head, so its colour says which is which."""
+    from marlenv.core.snake import Cell
+    from marlenv.grading.ratchet import own_length
+
+    grid = np.zeros((5, 5), dtype=np.int64)
+    grid[2, 2] = Cell.HEAD.value                  # snake 0, the viewer
+    grid[2, 3] = Cell.BODY.value
+    grid[0, 0] = 10 + Cell.HEAD.value             # snake 1, someone else
+    grid[0, 1] = 10 + Cell.BODY.value
+    assert own_length(grid) == 2
+
+
+def test_the_single_agent_adapter_needs_to_be_told_its_action():
+    """It has no policy head, so silently sampling one would be a lie."""
+    from marlenv.wm.model import WorldModel
+    from marlenv.wm.runner import SingleAgentAdapter
+
+    torch.manual_seed(0)
+    model = WorldModel(view=9, dim=64, depth=2, heads=4, num_actions=4,
+                       frame='world', align_coords=True)
+    adapter = SingleAgentAdapter(model, agent=1, window=8, device='cpu')
+    adapter.reset(torch.randn(1, 1, 3, 9, 9, 3).clamp(-1, 1))
+
+    assert adapter.frames.shape[2] == 3, 'the report lost its agent axis'
+    assert adapter.living == [1]
+    with pytest.raises(ValueError, match='does not choose one'):
+        adapter.step(fixed={0: 2}, denoise_steps=1)
+
+    adapter.step(fixed={1: 2}, denoise_steps=1)
+    assert adapter.frames.shape == (1, 1, 3, 9, 9, 3)

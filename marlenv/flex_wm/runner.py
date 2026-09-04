@@ -449,7 +449,15 @@ class CachedFlexRunner(FlexRunner):
 
     @torch.no_grad()
     def observe(self, actions, frames, live=None):
-        """Absorb a real transition, committing the frontier as it goes."""
+        """Absorb a real transition, committing the frontier as it goes.
+
+        There may be no frontier to close: once every agent has been
+        retired nothing new was opened, and a caller feeding real steps in
+        should not have to know that.
+        """
+        if self.frontier is None:
+            self.time += 1
+            return
         for slot, agent in enumerate(self.living):
             self.frontier.actions[0, slot] = int(actions[agent])
             self.pairs.actions[0, -self.frontier.pairs + slot] = int(
