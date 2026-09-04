@@ -221,3 +221,56 @@ def test_the_agent_count_may_change_between_steps():
     loss, _, _ = flex_training_loss(model, pairs,
                                     generator=torch.Generator().manual_seed(0))
     assert torch.isfinite(loss)
+
+
+# ---------------------------------------------------------------- removal
+def test_removal_closes_the_channel_a_retired_agent_would_leave():
+    """What was in a removed pair cannot reach the loss, at all.
+
+    Pinning a dead agent's tokens at maximum noise leaves them in the
+    sequence, where their position and their number still say something.
+    Removing them means there is nothing to say it with.
+    """
+    from marlenv.flex_wm.pairs import PairBatch, compact
+    from marlenv.flex_wm.train import flex_training_loss
+
+    _, model = shapes(schedule='FAG')
+    torch.manual_seed(3)
+    observations = torch.randn(1, 6, 9, 9, 3).clamp(-1, 1)
+    keep = torch.tensor([[True, True, False, True, False, True]])
+    build = lambda obs: PairBatch(
+        observations=obs, actions=torch.arange(6)[None] % 4,
+        agent=torch.tensor([[0, 1, 2, 0, 2, 1]]),
+        time=torch.tensor([[0, 0, 0, 1, 1, 1]]),
+        position=torch.zeros(1, 6, 2, dtype=torch.long))
+
+    tampered = observations.clone()
+    tampered[0, 2] = 5.0                       # both are removed pairs
+    tampered[0, 4] = -5.0
+
+    losses = []
+    for obs in (observations, tampered):
+        pairs = compact(build(obs), keep)
+        losses.append(float(flex_training_loss(
+            model, pairs,
+            generator=torch.Generator().manual_seed(0))[0].detach()))
+
+    assert losses[0] == pytest.approx(losses[1], rel=1e-6), (
+        'a removed pair still reached the loss')
+
+
+def test_removed_pairs_leave_no_tokens_behind():
+    from marlenv.flex_wm.pairs import PairBatch, compact, token_attributes
+
+    pairs = PairBatch(observations=torch.zeros(1, 4, 9, 9, 3),
+                      actions=torch.zeros(1, 4, dtype=torch.long),
+                      agent=torch.tensor([[3, 4, 5, 6]]),
+                      time=torch.zeros(1, 4, dtype=torch.long),
+                      position=torch.zeros(1, 4, 2, dtype=torch.long))
+    kept = compact(pairs, torch.tensor([[True, False, True, False]]))
+
+    assert kept.pairs == 2, 'the set was not repacked'
+    assert kept.agent.tolist() == [[3, 5]]
+    _, agent, _, valid = token_attributes(kept, tokens_per_frame=9)
+    assert valid.all(), 'padding survived a full row'
+    assert set(agent[0].tolist()) == {3, 5}

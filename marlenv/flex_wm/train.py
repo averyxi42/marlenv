@@ -18,6 +18,7 @@ import numpy as np
 import torch
 
 from marlenv.flex_wm.data import pairs_from_arrays
+from marlenv.flex_wm.pairs import compact
 from marlenv.wm.diffusion import add_noise, to_velocity
 from marlenv.wm.matrain import MultiBatcher
 from marlenv.wm.multiagent import actions_to_signal
@@ -30,7 +31,22 @@ class PairBatcher(MultiBatcher):
     unpacked here and never mentioned again.
     """
 
-    def pairs(self, size, model):
+    def pairs(self, size, model, drop_retired=True):
+        """A crop as a set of pairs, plus the per-episode action weights.
+
+        size         crops in the batch
+        model        supplies the dead reckoning and the patch geometry
+        drop_retired remove pairs that are not targets, rather than pinning
+                     them at the top of the noise schedule
+
+        Returns ``(PairBatch, weight (size,), dropout (size,))``.
+
+        Removal is the default because a token that is present is a token
+        the model can read: even pinned at maximum noise, its position and
+        the count of them carry information a dead agent should not be
+        supplying. A rollout stops simulating a dead agent outright, so
+        removal is also what makes the two agree.
+        """
         (frames, actions, alive, trained, origins, weight,
          dropout) = self.batch(size)
         # every observation is paired with the action taken from it,
@@ -38,6 +54,8 @@ class PairBatcher(MultiBatcher):
         trailing = torch.cat([actions, actions[:, -1:]], dim=1)
         batch = pairs_from_arrays(frames, trailing, origins, alive, trained,
                                   model=model)
+        if drop_retired:
+            batch = compact(batch, batch.trained)
         return batch, weight, dropout
 
 

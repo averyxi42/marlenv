@@ -72,8 +72,65 @@ class PairBatch:
         return PairBatch(**moved)
 
 
+def compact(pairs, keep):
+    """Drop the pairs ``keep`` is false for, repacking what is left.
+
+    pairs ``PairBatch`` of ``(b, p)``
+    keep  ``(b, p)`` bool
+
+    Returns a ``PairBatch`` of ``(b, p')`` where ``p'`` is the largest
+    number surviving in any row; rows with fewer are padded and marked
+    invalid.
+
+    This is how an agent leaves. Retiring it by pinning its tokens at the
+    top of the noise schedule would keep them in the sequence, and a token
+    that is present is a token the model can learn to read -- position and
+    count alone say something, even when the content says nothing. Removing
+    them closes that channel, and it is the same thing a rollout does when
+    an agent stops being simulated, so the two agree by construction rather
+    than by careful arrangement.
+    """
+    import torch as _torch
+
+    keep = keep & pairs.valid
+    counts = keep.sum(dim=1)
+    width = int(counts.max().clamp(min=1))
+    batch = pairs.batch
+    device = pairs.observations.device
+
+    # a stable gather: surviving pairs keep their order, padding goes last
+    order = _torch.argsort(~keep, dim=1, stable=True)[:, :width]
+    slot = _torch.arange(width, device=device)[None]
+    live = slot < counts[:, None]
+
+    def take(values, fill=0):
+        index = order.reshape(batch, width, *([1] * (values.dim() - 2)))
+        gathered = _torch.gather(
+            values, 1, index.expand(-1, -1, *values.shape[2:]))
+        spread = live.reshape(batch, width, *([1] * (values.dim() - 2)))
+        return _torch.where(spread, gathered,
+                            _torch.full_like(gathered, fill))
+
+    return PairBatch(
+        observations=take(pairs.observations),
+        actions=take(pairs.actions),
+        # an identity no real pair carries, so padding matches nothing
+        agent=take(pairs.agent, fill=-1),
+        time=take(pairs.time),
+        position=take(pairs.position),
+        valid=live,
+        trained=take(pairs.trained) & live,
+        acted=take(pairs.acted) & live)
+
+
 def token_attributes(pairs, tokens_per_frame):
     """Per-token ``(time, agent, is_action, valid)``, in pair-major order.
+
+    pairs            ``PairBatch`` of ``(b, p)``
+    tokens_per_frame patches an observation is cut into
+
+    Each returned tensor is ``(b, p * (tokens_per_frame + 1))``; ``time``
+    and ``agent`` are long, the rest bool.
 
     Each pair lays down its patch tokens and then its action token, so a
     pair occupies a contiguous run. The order is a convenience for reading
@@ -95,7 +152,13 @@ def token_attributes(pairs, tokens_per_frame):
 
 
 def token_coords(pairs, offsets):
-    """``(batch, tokens, 3)`` of time, row and column.
+    """Rotary coordinates per token.
+
+    pairs   ``PairBatch`` of ``(b, p)``
+    offsets ``(tokens_per_frame, 2)`` cell offset of each patch centre from
+            the observation's own position
+
+    Returns ``(b, p * (tokens_per_frame + 1), 3)`` long, of time, row, col.
 
     A patch sits at its own offset from the observation's position; the
     action sits at the position itself, which is the same cell the central

@@ -10,8 +10,12 @@ may not be seen by the observation it was taken from. What changes here is
     agent   only within one agent's own history
     global  everywhere the base rule allows, which is the older behaviour
 
-Each is the one below it with a further restriction, so they nest: frame is
-a subset of agent, which is a subset of global. Alternating them gives a
+Each adds a conjunct to the one below it. A conjunct on the predicate is an
+intersection on the set of permitted pairs, so more conjuncts permit less:
+global is the base rule, agent is that and same-identity, frame is that and
+same-step. The permitted sets therefore nest the other way round from the
+list of conditions -- frame within agent within global. Alternating them
+gives a
 model that can consolidate a single view, follow one agent through time
 without another agent's tokens sitting in the way, and still share what
 everyone has seen -- without an agent-identity embedding, because a mask
@@ -53,8 +57,19 @@ def parse_schedule(spec, depth):
 def base_rule(time, is_action, window=None):
     """Causality, plus the two exceptions the model has always had.
 
-    ``time`` and ``is_action`` are ``(batch, tokens)``. Returns
-    ``(batch, 1, tokens, tokens)`` so it can be handed straight to SDPA.
+    time       ``(batch, tokens)`` long, the step each token belongs to
+    is_action  ``(batch, tokens)`` bool, action token rather than a patch
+    window     frames of history a token may reach back over, or ``None``
+
+    Returns ``(batch, 1, tokens, tokens)`` bool, broadcast over heads, where
+    entry ``[b, 0, q, k]`` says whether query ``q`` may attend to key ``k``.
+
+    The window counts *frames*, not tokens, and it is the only conjunct here
+    that varies with scope in effect rather than in form. Under frame scope
+    query and key share a step, so the difference is always zero and the
+    window never bites. Under agent scope a window of W admits W of that
+    agent's own observations; under global scope the same W admits W steps
+    of every agent at once, which is many more tokens for the same number.
     """
     query, key = time[:, :, None], time[:, None, :]
     allowed = key <= query
@@ -70,9 +85,18 @@ def base_rule(time, is_action, window=None):
 def scope_mask(scope, time, agent, is_action, window=None, valid=None):
     """The base rule, narrowed to one scope.
 
-    ``valid`` marks real tokens; padding is never attended to, and a padded
-    query is left able to see itself so attention cannot produce NaNs from
-    an entirely empty row.
+    scope      one of ``FRAME``, ``AGENT``, ``GLOBAL``
+    time       ``(batch, tokens)`` long
+    agent      ``(batch, tokens)`` long, compared for equality only
+    is_action  ``(batch, tokens)`` bool
+    window     frames of history, or ``None`` for unlimited
+    valid      ``(batch, tokens)`` bool, real token rather than padding
+
+    Returns ``(batch, 1, tokens, tokens)`` bool.
+
+    Padding is never attended to, and a padded query keeps its own diagonal
+    so that no row is entirely empty -- an all-false row would send softmax
+    through a division by zero.
     """
     if scope not in SCOPES:
         raise ValueError(f'unknown attention scope {scope!r}')

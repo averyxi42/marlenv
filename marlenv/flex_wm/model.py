@@ -38,7 +38,17 @@ class FlexWorldModel(MultiAgentWorldModel):
 
     # --------------------------------------------------------------- tokens
     def pair_tokens(self, pairs, frames, actions, frame_tau, action_tau):
-        """Embed every pair into ``tokens_per_pair`` tokens, in pair order."""
+        """Embed every pair into ``tokens_per_pair`` tokens, in pair order.
+
+        pairs       ``PairBatch`` of ``(b, p)``, read for its shape only
+        frames      ``(b, p, view, view, channels)`` noisy observations
+        actions     ``(b, p, num_actions)`` noisy action content
+        frame_tau   ``(b, p)`` noise level of each observation
+        action_tau  ``(b, p)`` noise level of each action
+
+        Returns ``(b, p * tokens_per_pair, dim)``, each pair laying down its
+        ``tokens_per_frame`` patches followed by its one action token.
+        """
         batch, count = pairs.batch, pairs.pairs
         patches = self.frame_tokens(frames, frame_tau)
 
@@ -50,6 +60,8 @@ class FlexWorldModel(MultiAgentWorldModel):
         return tokens.reshape(batch, count * self.tokens_per_pair, self.dim)
 
     def token_types(self, batch, count, device):
+        """``(batch, count * tokens_per_pair)``: 0 for a patch, 1 for an
+        action."""
         types = torch.zeros(self.tokens_per_pair, dtype=torch.long,
                             device=device)
         types[-1] = 1
@@ -58,13 +70,24 @@ class FlexWorldModel(MultiAgentWorldModel):
     # -------------------------------------------------------------- forward
     def forward(self, pairs, noisy_frames, noisy_actions, frame_tau,
                 action_tau, window=None):
-        """Predict the noise on every observation and every action.
+        """Predict the velocity on every observation and every action.
 
-        ``pairs`` carries the attributes -- who, when, where, and what is
-        real -- and the two noisy tensors carry the content being denoised.
-        Keeping them apart is what lets a rollout hand over a set of pairs
-        whose actions are still only a guess: the guess lays out the
-        coordinates, and the content it is denoising is separate.
+        pairs         ``PairBatch`` of ``(b, p)``. Supplies ``agent`` and
+                      ``time`` for the masks, ``position`` and ``time`` for
+                      the coordinates, ``valid`` for padding, and
+                      ``actions`` only where a coordinate depends on it
+        noisy_frames  ``(b, p, view, view, channels)``
+        noisy_actions ``(b, p, num_actions)``
+        frame_tau     ``(b, p)`` in ``[0, 1]``
+        action_tau    ``(b, p)`` in ``[0, 1]``
+        window        frames of history, or ``None`` for the whole set
+
+        Returns ``(frames (b, p, view, view, channels),
+        actions (b, p, num_actions))``.
+
+        Attributes and content are separate arguments because a rollout has
+        only a guess at the actions it is still denoising: the guess places
+        the tokens, and the content being denoised is passed apart from it.
         """
         device = pairs.observations.device
         batch, count = pairs.batch, pairs.pairs
