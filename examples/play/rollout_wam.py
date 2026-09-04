@@ -68,6 +68,12 @@ def parse_args():
                         'board inside what it knows')
     p.add_argument('--num-fruits', type=int, default=4)
     p.add_argument('--view-radius', type=int, default=4)
+    p.add_argument('--background-gradient', type=float, default=16.0,
+                   help='must match the data the model was trained on. A '
+                        'model trained without it reads a gradient as an '
+                        'observation it has never seen')
+    p.add_argument('--observation-noise', type=float, default=2.0)
+    p.add_argument('--snake-noise', type=float, default=8.0)
     p.add_argument('--obstacle-density', type=float, default=0.12)
     p.add_argument('--death-patience', type=int, default=3)
     p.add_argument('--device', default=None)
@@ -108,6 +114,12 @@ def build_solver(args, num_actions):
 
 def main():
     args = parse_args()
+    if not args.checkpoint:
+        print('note: no --checkpoint, so the bootstrap prefix is played by '
+              'random rollouts.\n      Those rarely take fruit, so the '
+              'snakes stay short and the model is handed\n      a prefix '
+              'unlike anything it trained on. Pass the policy the data '
+              'was\n      collected with to avoid it.')
     device = args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
     model, context = load_model(args.model, device)
     agents = args.num_agents or model.num_agents
@@ -115,8 +127,9 @@ def main():
     env = gym.make('Snake-v1', height=args.side, width=args.side,
                    num_snakes=agents, num_fruits=args.num_fruits,
                    reward_dict=REWARD_DICT, view_radius=args.view_radius,
-                   observation_noise=2.0, snake_noise_sigma=8.0,
-                   background_gradient=16.0,
+                   observation_noise=args.observation_noise,
+                   snake_noise_sigma=args.snake_noise,
+                   background_gradient=args.background_gradient,
                    obstacle_density=args.obstacle_density,
                    snake_colors=args.snake_colors,
                    disable_env_checker=True)

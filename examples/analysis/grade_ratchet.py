@@ -49,6 +49,12 @@ def parse_args():
     p.add_argument('--num-agents', type=int, default=3)
     p.add_argument('--num-fruits', type=int, default=4)
     p.add_argument('--view-radius', type=int, default=4)
+    p.add_argument('--background-gradient', type=float, default=16.0,
+                   help='must match the data the model was trained on. A '
+                        'model trained without it reads a gradient as an '
+                        'observation it has never seen')
+    p.add_argument('--observation-noise', type=float, default=2.0)
+    p.add_argument('--snake-noise', type=float, default=8.0)
     p.add_argument('--obstacle-density', type=float, default=0.12)
     p.add_argument('--device', default=None)
     return p.parse_args()
@@ -119,8 +125,9 @@ def main():
             'Snake-v1', height=args.side, width=args.side,
             num_snakes=args.num_agents, num_fruits=args.num_fruits,
             reward_dict=REWARD_DICT, view_radius=args.view_radius,
-            observation_noise=2.0, snake_noise_sigma=8.0,
-            background_gradient=16.0,
+            observation_noise=args.observation_noise,
+            snake_noise_sigma=args.snake_noise,
+            background_gradient=args.background_gradient,
             obstacle_density=args.obstacle_density,
             disable_env_checker=True)
         env.reset(seed=seed)

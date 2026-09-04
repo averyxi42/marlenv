@@ -51,10 +51,17 @@ python examples/play/play_wam.py \
 ```
 
 Both bootstrap with real steps from the simulator before handing over, so
-the model starts from something in distribution; `--checkpoint` is the
-search that plays that prefix, and dropping it falls back to random
-rollouts. `--bootstrap 1` hands over immediately. `play_wam.py` needs a
-display -- add `--headless` to run it without one.
+the model starts from something in distribution. `--checkpoint` is the
+search that plays that prefix, and it matters more than it looks: without
+it the prefix is played by random rollouts, which survive but rarely take
+fruit, so the model is handed a short-snaked history unlike anything it
+trained on. `--bootstrap 1` hands over immediately, which is the hardest
+case rather than the neutral one. `play_wam.py` needs a display -- add
+`--headless` to run it without one.
+
+`--background-gradient` must match the data the model was trained on, and
+defaults to 16.0; pass `0` for a model trained on the gradient-free sets.
+Nothing records this in the checkpoint, so it is on you to get right.
 
 The model was trained with three snakes. It generalises to more, because
 agents are told apart by where they are rather than by an identity
@@ -133,6 +140,67 @@ to 24 doubles the parameters to 19.2M and roughly doubles the step time.
 to check that it really does reproduce what it grew from.
 
 ### Measuring it
+
+Frame accuracy is not enough on its own. Most of a view is background and
+wall, so a model can be right about nearly every pixel while its snakes
+quietly dissolve, and the loss will say it is improving the whole time.
+
+```bash
+python examples/analysis/grade_ratchet.py \
+    --models marlenv/demodata/wam_deep/model_step8000.pt \
+             marlenv/demodata/flex_wam/model_step4000.pt \
+    --names global flex \
+    --policy marlenv/demodata/az_policy.pt
+```
+
+This rolls each model forward under the simulator's own actions and reports
+two rates separately, one step at a time:
+
+| | |
+| --- | --- |
+| `lost` | cells that hold a snake and were not drawn as one |
+| `gained` | cells drawn as a snake that hold none |
+
+The asymmetry is the measurement. A model whose errors run both ways sits
+near the right length; one that only ever loses collapses in a rollout
+however small its per-step error, because the shortened snake becomes its
+own history and nothing ever puts a cell back. That is the difference
+between a model that can be played and one that cannot, and the totals hide
+it completely.
+
+`dreamt` and `true` are the snake length visible from the agent's own
+viewpoint, so they are a floor on the real length -- a long snake reaches
+past the edge of the view.
+
+#### Settings that will quietly ruin it
+
+**`--policy` must be the one the data was collected with.** Without it the
+simulator is driven by random rollouts, which survive but rarely take
+fruit. The snakes then never grow past about three, no model is ever asked
+to hold a long one, and the measurement finds nothing because nothing it
+looks for happens. This is the single easiest way to get a confidently
+wrong answer.
+
+**`--background-gradient` must match the training data.** A model trained
+without the gradient reads one as an observation it has never seen, and a
+model trained with it reads a flat background the same way. It defaults to
+16.0, which suits the original datasets and is wrong for anything collected
+with `--background-gradient 0`. Nothing records this in the checkpoint or
+the dataset, so it has to be passed by hand -- the same applies to
+`--observation-noise` and `--snake-noise`.
+
+**`--bootstrap` decides what history the model starts from.** One frame is
+the hardest case and mostly measures a cold start; a prefix longer than
+`--window` has its earliest frames evicted before the rollout begins, so
+anything past the window is wasted. Somewhere well inside the window, with
+the real policy driving it, is what a played rollout looks like.
+
+**`--window` is not free to choose.** Longer is not better: measured on the
+global model, own length at rollout steps 40-59 held 1.80 at a window of 12
+and collapsed to 0.18 at 48, because a longer context keeps more
+self-generated, already-shortened history in view to reinforce itself.
+
+### Scoring single frames
 
 ```bash
 python examples/analysis/grade_frames.py \
