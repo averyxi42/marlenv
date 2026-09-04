@@ -59,6 +59,31 @@ IDENTITY_INK = [(120, 210, 255), (255, 150, 170), (170, 255, 160),
                 (200, 200, 120), (240, 160, 230)]
 ARROWS = {0: (-1, 0), 1: (0, 1), 2: (1, 0), 3: (0, -1)}
 
+# both glyphs are drawn from the same grid at the same scale, so the arrow
+# and the stick under it read as one piece of pixel art rather than as a
+# drawing next to a sprite
+UNIT = 2
+ARROW_BITS = ('.........',
+              '.....#...',
+              '.....##..',
+              '########.',
+              '#########',
+              '########.',
+              '.....##..',
+              '.....#...',
+              '.........')
+STICK_BITS = ('..#####..',
+              '..#####..',
+              '..#####..',
+              '...###...',
+              '...###...',
+              '..#####..',
+              '.#######.',
+              '#########',
+              '#########')
+# the arrow above points right; turn it clockwise to face anywhere else
+TURNS = {0: 3, 1: 0, 2: 1, 3: 2}
+
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
@@ -219,29 +244,35 @@ def view_image(view, visible, cell):
     return image
 
 
-def joystick(draw, cx, top, colour):
-    """A small pixel-art stick, the customary mark for an action."""
-    draw.rectangle([cx - 3, top, cx + 2, top + 4], fill=colour)
-    draw.rectangle([cx - 1, top + 4, cx, top + 8], fill=colour)
-    draw.rectangle([cx - 5, top + 8, cx + 4, top + 10], fill=colour)
-    draw.rectangle([cx - 7, top + 10, cx + 6, top + 13], fill=colour)
+def turned(bits, quarters):
+    """The same little bitmap, rotated clockwise."""
+    grid = [list(row) for row in bits]
+    for _ in range(quarters % 4):
+        grid = [list(row) for row in zip(*grid[::-1])]
+    return [''.join(row) for row in grid]
 
 
-def arrow(draw, box, action, colour):
-    """A cardinal arrow for the action taken from a frame."""
-    x0, y0, x1, y1 = box
-    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    dr, dc = ARROWS[int(action)]
-    reach = min(x1 - x0, y1 - y0) * 0.42
-    hx, hy = cx + dc * reach, cy + dr * reach
-    tx, ty = cx - dc * reach, cy - dr * reach
-    draw.line([tx, ty, hx, hy], fill=colour, width=3)
-    # a head made of two strokes, turned back along the shaft
-    for sign in (-1, 1):
-        px, py = -dr * sign, dc * sign
-        draw.line([hx, hy, hx - dc * reach * 0.55 + px * reach * 0.45,
-                   hy - dr * reach * 0.55 + py * reach * 0.45],
-                  fill=colour, width=3)
+def stamp(draw, bits, left, top, colour):
+    """Paint a bitmap at ``UNIT`` pixels to the cell."""
+    for r, row in enumerate(bits):
+        for c, mark in enumerate(row):
+            if mark == '#':
+                draw.rectangle([left + c * UNIT, top + r * UNIT,
+                                left + (c + 1) * UNIT - 1,
+                                top + (r + 1) * UNIT - 1], fill=colour)
+
+
+def action_mark(draw, cx, top, action, colour, spacing):
+    """A cardinal arrow with a stick beneath it, as one glyph.
+
+    The arrow says which way, in white, because direction belongs to nobody;
+    the stick says whose decision it was, and carries the identity's colour.
+    """
+    side = len(ARROW_BITS) * UNIT
+    stamp(draw, turned(ARROW_BITS, TURNS[int(action)]), cx - side // 2, top,
+          INK)
+    stamp(draw, STICK_BITS, cx - side // 2, top + side + spacing, colour)
+    return side
 
 
 def font_for(size):
@@ -347,16 +378,16 @@ def compose(episode, ego, start, pairs, args, radius):
                 spot = (x, band(order), x + picture.width,
                         band(order) + picture.height)
                 if pairs['acted'][row] and index < steps - 1:
-                    # arrow and stick read as one mark, so it is the point
-                    # between their centres that sits level with the tile,
-                    # not the arrow alone
-                    tall, drop, stick = 22, 26, 13
-                    middle = (tall / 2 + drop + stick / 2) / 2
-                    top = spot[1] + tile / 2 - middle
-                    arrow(draw, (spot[2] + 4, top, spot[2] + gap - 4,
-                                 top + tall), int(pairs['actions'][row]),
-                          colour)
-                    joystick(draw, spot[2] + gap / 2, top + drop, colour)
+                    # the pair reads as one mark, so it is the point between
+                    # their centres that sits level with the tile
+                    side, spacing = len(ARROW_BITS) * UNIT, 9
+                    # arrow centre sits at side/2 below the top, stick centre
+                    # at 1.5*side + spacing; halfway between is side + half
+                    # the spacing
+                    middle = side + spacing / 2
+                    action_mark(draw, spot[2] + gap / 2,
+                                spot[1] + tile / 2 - middle,
+                                int(pairs['actions'][row]), colour, spacing)
 
             # the bubble: where this identity begins and ends
             first, last = min(columns), max(columns)
