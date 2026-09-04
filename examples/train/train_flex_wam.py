@@ -48,6 +48,12 @@ def parse_args():
     p.add_argument('--egocentric', action='store_true',
                    help='train on what one agent could have seen, rather '
                         'than on the whole board')
+    p.add_argument('--drop-death-frames', dest='death_frames',
+                   action='store_false', default=True,
+                   help="leave out the observer's own aftermath frame, "
+                        'which is the only death a model trained this way '
+                        'ever sees. Reproduces runs made before it was '
+                        'kept; not what you want for a new one')
     p.add_argument('--solo', action='store_true',
                    help="one agent's record and nothing else; implies "
                         '--egocentric. The baseline: what the architecture '
@@ -167,7 +173,8 @@ def egocentric_batchers(datasets, weights, dropouts, args, device):
 
     def build(source, rng):
         return egocentric_pairs(source, offsets, rng=rng, radius=view // 2,
-                                others=not args.solo)
+                                others=not args.solo,
+                                death_frames=args.death_frames)
 
     order = np.random.default_rng(args.seed).permutation(len(sources))
     cut = max(int(len(order) * (1 - args.val_fraction)), 1)
@@ -188,7 +195,8 @@ def egocentric_batchers(datasets, weights, dropouts, args, device):
     print(f'  {len(sources)} episodes -> {cut} train, '
           f'{len(order) - cut} val, {pairs} pairs from one seat each, '
           f'{seen / max(tokens, 1):.1%} of patches seen'
-          f'{"  (solo: no other agent kept)" if args.solo else ""}',
+          f'{"  (solo: no other agent kept)" if args.solo else ""}'
+          f'{"  (no death frames)" if not args.death_frames else ""}',
           flush=True)
     return batcher, validation, view
 

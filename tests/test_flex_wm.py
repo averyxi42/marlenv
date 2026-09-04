@@ -1147,7 +1147,17 @@ def test_a_death_gives_the_observer_its_last_action():
     dies = np.ones((frames, agents), bool)
     dies[5:, 0] = False
     ego = egocentric_episode(build(dies), offsets, ego=0, radius=4)
-    assert ego.acted.all(), 'a fatal move was treated as unknown'
+    # five living frames and the aftermath: the fatal move belongs to the
+    # last living one, and the frame it leads to has no action of its own
+    assert ego.time.tolist() == [0, 1, 2, 3, 4, 5]
+    assert ego.acted[:-1].all(), 'a fatal move was treated as unknown'
+    assert not ego.acted[-1], 'the aftermath was given an action'
+
+    dropped = egocentric_episode(build(dies), offsets, ego=0, radius=4,
+                                 death_frames=False)
+    assert dropped.time.tolist() == [0, 1, 2, 3, 4]
+    assert dropped.acted.all(), (
+        'with the aftermath gone the fatal move still has to be trained')
 
     survives = np.ones((frames, agents), bool)
     ego = egocentric_episode(build(survives), offsets, ego=0, radius=4)
@@ -1357,3 +1367,30 @@ def test_a_solo_pair_set_holds_one_agent_and_nothing_else():
     for name in ('time', 'position', 'actions', 'acted'):
         assert np.array_equal(both[name][own], alone[name]), name
     assert alone['visible'].all(), 'the observer withholds nothing from itself'
+
+
+def test_the_observer_keeps_the_view_from_the_cell_it_died_entering():
+    """A model with no death frame has no idea what dying looks like."""
+    from marlenv.flex_wm.egocentric import egocentric_pairs, patch_offsets
+
+    frames, view = 8, 9
+    poses = np.zeros((frames, 2, 3), np.int64)
+    alive = np.ones((frames, 2), bool)
+    cardinal = np.zeros((frames, 2, 4), np.int64)
+    cardinal[..., 1] = 1
+    for t in range(frames):
+        poses[t, 0] = (5, 5 + t, 1)
+        poses[t, 1] = (40, 40, 1)
+    alive[5:, 0] = False
+    observations = np.zeros((frames, 2, view, view, 3), np.uint8)
+    observations[5, 0] = 77          # the aftermath, told apart by its pixels
+    episode = {'alive_mask': alive, 'poses': poses,
+               'observations': observations, 'cardinal_actions': cardinal}
+
+    pairs = egocentric_pairs(episode, patch_offsets(view, 3), ego=0)
+    own = pairs['agent'] == 0
+    assert pairs['time'][own].max() == 5, 'the death frame was dropped'
+    after = pairs['observations'][own][pairs['time'][own] == 5]
+    assert (after == 77).all(), 'the aftermath is not the frame kept'
+    # it is a target like any other; it simply has no action after it
+    assert pairs['trained'][own].all()

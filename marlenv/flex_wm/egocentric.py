@@ -140,7 +140,7 @@ def cardinal_from_step(before, after):
 
 
 def egocentric_pairs(episode, offsets, ego=None, rng=None, radius=4,
-                     patch=3, others=True):
+                     patch=3, others=True, death_frames=True):
     """An episode as a flat pair set, ready for a batcher.
 
     The same reconstruction as :func:`egocentric_episode`, in the shape the
@@ -148,7 +148,8 @@ def egocentric_pairs(episode, offsets, ego=None, rng=None, radius=4,
     patch, by ``visible``, not by dropping the observation.
     """
     seen = egocentric_episode(episode, offsets, ego=ego, rng=rng,
-                              radius=radius, patch=patch, others=others)
+                              radius=radius, patch=patch, others=others,
+                              death_frames=death_frames)
     return {'observations': seen.observations, 'actions': seen.actions,
             'agent': seen.agent, 'time': seen.time, 'position': seen.position,
             'visible': seen.visible, 'acted': seen.acted,
@@ -156,7 +157,7 @@ def egocentric_pairs(episode, offsets, ego=None, rng=None, radius=4,
 
 
 def egocentric_episode(episode, offsets, ego=None, rng=None, radius=4,
-                       patch=3, others=True):
+                       patch=3, others=True, death_frames=True):
     """Rebuild ``episode`` as one agent could have recorded it.
 
     episode a decoded episode, as :func:`marlenv.data.decode_episode` gives
@@ -165,6 +166,12 @@ def egocentric_episode(episode, offsets, ego=None, rng=None, radius=4,
     rng     for that choice
     radius  view radius, in cells
     patch   patch width, in cells
+    death_frames
+            keep the observer's own aftermath: the view from the cell it
+            died entering. It is recorded, it is the observer's own, and it
+            is the only thing there is to predict past that point, so
+            dropping it leaves a model with no idea what dying looks like.
+            False reproduces runs made before this was kept
     others  keep the agents the observer recovered. Setting it False
             leaves one agent's record and nothing else, which is the
             baseline the egocentric run has to beat: whatever a model
@@ -198,12 +205,17 @@ def egocentric_episode(episode, offsets, ego=None, rng=None, radius=4,
 
     # the observer's own record: complete, and its own actions are its own
     own = np.flatnonzero(alive[:, ego])
+    died = bool(len(own) and own[-1] + 1 < frames
+                and not alive[own[-1] + 1, ego])
+    kept = list(own) + ([int(own[-1]) + 1] if died and death_frames else [])
     # the observer knows its own actions; the only one it lacks is at the
-    # end of the episode, where none was recorded. A death is not that
-    # case -- the move that killed it is a move like any other
-    ended = len(own) and own[-1] + 1 >= frames
+    # end of the record. A death is not that case -- the move that killed
+    # it is a move like any other -- so when the aftermath is dropped the
+    # final living frame still carries one
+    tail_acted = died and not death_frames
     if len(own) >= 2:
-        for position, step in enumerate(own):
+        for position, step in enumerate(kept):
+            last = position == len(kept) - 1
             rows.append(dict(
                 observation=upright(step, ego),
                 action=cardinal[step, ego],
@@ -211,7 +223,7 @@ def egocentric_episode(episode, offsets, ego=None, rng=None, radius=4,
                 time=int(step),
                 position=poses[step, ego, :2],
                 visible=np.ones(tokens, bool),
-                acted=position < len(own) - 1 or not ended))
+                acted=not last or tail_acted))
         next_id += 1
 
     for other in range(agents) if others else ():
