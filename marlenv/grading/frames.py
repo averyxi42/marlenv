@@ -174,3 +174,64 @@ def grade_single(model, sequences, context, device, denoise_steps=16,
     dream = denoise_last(step_fn, frames[:, -1:].shape, device,
                          denoise_steps, seed)
     return report(to_classes(frames[:, -1]), to_classes(dream[:, 0]))
+
+
+# -------------------------------------------------------------------- flex
+def grade_flex(model, sequences, context, device, denoise_steps=16,
+               stride=7, limit=48, seed=0, window=None):
+    """The same measurement for a model that works over sets of pairs.
+
+    Scored on identical crops to :func:`grade_multi`, so the numbers are
+    comparable between a model with attention scopes and one without.
+    """
+    import torch as _torch
+
+    from marlenv.flex_wm.data import pairs_from_arrays
+    from marlenv.wm.data import to_model_input
+    from marlenv.wm.multiagent import actions_to_signal
+
+    crops = multi_crops(sequences, context, stride, limit)
+    if not crops:
+        raise ValueError('no clean full-length crops')
+    agents = sequences['observations'].shape[2]
+
+    frames = torch.from_numpy(to_model_input(np.stack(
+        [sequences['observations'][r, s:s + context] for r, s in crops]
+    ))).to(device)
+    actions = torch.from_numpy(np.stack(
+        [sequences['actions'][r, s:s + context - 1] for r, s in crops]
+    )).to(device)
+    # every observation is paired with an action, the last being the one a
+    # policy would be asked for
+    actions = torch.cat([actions, actions[:, -1:]], dim=1)
+    positions = torch.from_numpy(np.stack(
+        [sequences['positions'][r, s:s + context] for r, s in crops]
+    )).to(device)
+    positions = positions - positions[:, :1, :1]
+    alive = torch.ones(len(crops), context, agents, dtype=torch.bool,
+                       device=device)
+
+    pairs = pairs_from_arrays(frames, actions, None, alive,
+                              positions=positions)
+    signal = actions_to_signal(pairs.actions,
+                               model.action_out.out_features)
+    frame_tau = torch.zeros(len(crops), pairs.pairs, device=device)
+    action_tau = torch.zeros(len(crops), pairs.pairs, device=device)
+    newest = pairs.time == context - 1
+
+    def step_fn(current, level):
+        content = pairs.observations.clone()
+        content[newest] = current.reshape(-1, *current.shape[2:])
+        tau = torch.where(newest, _torch.full_like(frame_tau, level),
+                          frame_tau)
+        with torch.no_grad():
+            predicted, _ = model(pairs, content, signal, tau, action_tau,
+                                 window=window)
+        return predicted[newest].reshape(len(crops), agents,
+                                         *predicted.shape[2:])
+
+    shape = (len(crops), agents, *frames.shape[3:])
+    dream = denoise_last(step_fn, shape, device, denoise_steps, seed)
+    truth = frames[:, -1].reshape(-1, *frames.shape[3:])
+    return report(to_classes(truth), to_classes(dream.reshape(
+        -1, *dream.shape[2:])))
