@@ -1030,3 +1030,50 @@ def test_a_patch_marked_visible_is_one_the_observer_could_reconstruct():
         env.step([0] * base.num_snakes)
 
     assert checked > 200, f'only {checked} cells were compared'
+
+
+def test_a_new_epoch_changes_the_viewpoint_but_an_epoch_does_not():
+    """Fixed within an epoch, resampled between them.
+
+    Both halves matter. Resampling inside an epoch would make an epoch mean
+    something other than every episode seen once; never resampling would
+    show the model one agent's account of each episode forever.
+    """
+    from marlenv.flex_wm.batch import ResampledBatcher
+
+    def build(source, rng):
+        chosen = int(rng.integers(0, 3))
+        steps = 6
+        return {'observations': np.zeros((steps, 9, 9, 3), np.uint8),
+                'actions': np.zeros(steps, np.int64),
+                'agent': np.full(steps, chosen, np.int64),
+                'time': np.arange(steps, dtype=np.int64),
+                'position': np.zeros((steps, 2), np.int64),
+                'visible': np.ones((steps, 9), bool),
+                'acted': np.ones(steps, bool),
+                'trained': np.ones(steps, bool)}
+
+    batcher = ResampledBatcher(range(40), build, context=4, seed=0)
+    first = [int(e['agent'][0]) for e in batcher.episodes]
+    again = [int(e['agent'][0]) for e in batcher.episodes]
+    assert first == again, 'the viewpoint moved inside an epoch'
+
+    batcher.new_epoch()
+    second = [int(e['agent'][0]) for e in batcher.episodes]
+    assert first != second, 'a new epoch reused the same viewpoints'
+    changed = sum(a != b for a, b in zip(first, second)) / len(first)
+    assert changed > 0.4, f'only {changed:.2f} of episodes changed vantage'
+
+    # and it still batches
+    pairs, _, _ = batcher.batch(4)
+    assert pairs.batch == 4
+
+
+def test_a_plain_batcher_ignores_epochs():
+    """So a trainer can call it without knowing which kind it holds."""
+    from marlenv.flex_wm.batch import PairSetBatcher
+
+    batcher = PairSetBatcher([rectangular_set()], context=4, seed=0)
+    before = batcher.episodes
+    batcher.new_epoch()
+    assert batcher.episodes is before

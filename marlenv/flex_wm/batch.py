@@ -74,6 +74,9 @@ class PairSetBatcher:
         self.spans = np.array([int(e['time'].max()) + 1 for e in episodes])
         self.usable = np.flatnonzero(self.spans >= 2)
 
+    def new_epoch(self):
+        """Nothing to do: these episodes do not change between epochs."""
+
     def crop(self, index):
         """One episode's pairs inside a randomly placed window."""
         episode = self.episodes[index]
@@ -123,3 +126,45 @@ class PairSetBatcher:
         return (pairs,
                 torch.from_numpy(self.weights[picks]).to(self.device),
                 torch.from_numpy(self.dropouts[picks]).to(self.device))
+
+
+class ResampledBatcher(PairSetBatcher):
+    """Rebuilds its episodes each epoch, from a freshly chosen viewpoint.
+
+    An egocentric episode is one agent's account of what happened, so which
+    agent is asked is part of the sample. Choosing again every epoch shows
+    the model the same events from a different vantage, while holding the
+    choice fixed *within* an epoch keeps an epoch meaning what it usually
+    means -- every episode seen once, not the same episode seen from three
+    sides and counted three times.
+
+    Rebuilding is cheap enough to prefer over keeping every viewpoint in
+    memory: a few seconds against a few minutes of training, and it does
+    not grow with the number of agents the way storing them all does.
+    """
+
+    def __init__(self, sources, build, context, seed=0, device='cpu',
+                 weights=None, dropouts=None):
+        """
+        sources  the episodes to rebuild from, in whatever form ``build``
+                 expects
+        build    ``(source, rng) -> pair set``
+        """
+        self.sources = list(sources)
+        self.build = build
+        self.epochs = 0
+        self._seed = seed
+        super().__init__(self._make(seed), context, seed=seed,
+                         device=device, weights=weights, dropouts=dropouts)
+
+    def _make(self, seed):
+        rng = np.random.default_rng(seed)
+        return [self.build(source, rng) for source in self.sources]
+
+    def new_epoch(self):
+        """Choose fresh viewpoints and rebuild."""
+        self.epochs += 1
+        self.episodes = self._make(self._seed + self.epochs)
+        self.spans = np.array([int(e['time'].max()) + 1
+                               for e in self.episodes])
+        self.usable = np.flatnonzero(self.spans >= 2)
