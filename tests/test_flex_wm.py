@@ -1096,3 +1096,60 @@ def test_a_fatal_move_is_recorded_as_an_action():
         up, headings.index(Direction.LEFT), headings.index(Direction.RIGHT)]
     # an agent that is not playing has no heading to turn
     assert _headings_after([-1, up], [0, 0]).tolist()[0] == -1
+
+
+def test_the_aftermath_frame_survives_flattening():
+    """It is a target without being alive, which is the one case where
+    selecting on life loses something that matters."""
+    from marlenv.flex_wm.batch import flatten_episode
+
+    steps, agents = 6, 1
+    alive = np.ones((steps, agents), bool)
+    alive[4:] = False                      # dies entering frame 4
+    trained = alive.copy()
+    trained[4] = True                      # the aftermath is a target
+
+    flat = flatten_episode(
+        observations=np.zeros((steps, agents, 9, 9, 3), np.uint8),
+        actions=np.zeros((steps, agents), np.int64), alive=alive,
+        trained=trained, positions=np.zeros((steps, agents, 2), np.int64),
+        tokens=9)
+
+    assert flat['time'].tolist() == [0, 1, 2, 3, 4], (
+        'the aftermath frame was dropped, or the dead frames kept')
+    assert flat['trained'].tolist() == [True] * 5
+    # the aftermath has no action of its own; the fatal move is frame 3
+    assert flat['acted'].tolist() == [True, True, True, True, False]
+
+
+def test_a_death_gives_the_observer_its_last_action():
+    """The move that kills is recorded, so it is trained like any other.
+
+    Only the end of an episode leaves the observer without an action, and
+    for the plain reason that none was written down.
+    """
+    from marlenv.flex_wm.egocentric import egocentric_episode
+
+    frames, agents, view = 8, 2, 9
+    offsets = np.array([[r, c] for r in (-3, 0, 3) for c in (-3, 0, 3)])
+    cardinal = np.zeros((frames, agents, 4), np.int64)
+    cardinal[..., 1] = 1
+    poses = np.zeros((frames, agents, 3), np.int64)
+    poses[:, 0] = (5, 5, 1)
+    poses[:, 1] = (40, 40, 1)
+
+    def build(alive):
+        return {'alive_mask': alive, 'poses': poses,
+                'observations': np.zeros((frames, agents, view, view, 3),
+                                         np.uint8),
+                'cardinal_actions': cardinal}
+
+    dies = np.ones((frames, agents), bool)
+    dies[5:, 0] = False
+    ego = egocentric_episode(build(dies), offsets, ego=0, radius=4)
+    assert ego.acted.all(), 'a fatal move was treated as unknown'
+
+    survives = np.ones((frames, agents), bool)
+    ego = egocentric_episode(build(survives), offsets, ego=0, radius=4)
+    assert ego.acted[:-1].all() and not ego.acted[-1], (
+        'the end of an episode is the one place with no recorded action')

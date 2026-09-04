@@ -163,6 +163,10 @@ def egocentric_episode(episode, offsets, ego=None, rng=None, radius=4,
 
     # the observer's own record: complete, and its own actions are its own
     own = np.flatnonzero(alive[:, ego])
+    # the observer knows its own actions; the only one it lacks is at the
+    # end of the episode, where none was recorded. A death is not that
+    # case -- the move that killed it is a move like any other
+    ended = len(own) and own[-1] + 1 >= frames
     if len(own) >= 2:
         for position, step in enumerate(own):
             rows.append(dict(
@@ -172,7 +176,7 @@ def egocentric_episode(episode, offsets, ego=None, rng=None, radius=4,
                 time=int(step),
                 position=poses[step, ego, :2],
                 visible=np.ones(tokens, bool),
-                acted=position < len(own) - 1))
+                acted=position < len(own) - 1 or not ended))
         next_id += 1
 
     for other in range(agents):

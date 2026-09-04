@@ -31,11 +31,14 @@ def flatten_episode(observations, actions, alive, trained, positions,
     positions    ``(T, agents, 2)``
     tokens       patches per observation
 
-    Only live entries become pairs, so the padding at the end of a short
-    episode never enters the set at all.
+    Selected by ``trained``, not by ``alive``. The two differ at exactly one
+    frame per death: the aftermath, the view from the cell a snake died
+    entering. It is not alive but it is a target -- it is how death is made
+    predictable -- so selecting on life would silently drop it, while
+    padding beyond the episode is excluded either way.
     """
     steps, agents = alive.shape
-    keep = np.argwhere(alive)
+    keep = np.argwhere(alive | trained)
     time = keep[:, 0]
     who = keep[:, 1]
     return {
@@ -45,6 +48,8 @@ def flatten_episode(observations, actions, alive, trained, positions,
         'time': time.astype(np.int64),
         'position': positions[time, who],
         'visible': np.ones((len(time), tokens), bool),
+        # the aftermath frame is not alive, so it has no action of its own;
+        # the fatal move belongs to the frame before it
         'acted': alive[time, who] & (time < steps - 1),
         'trained': trained[time, who],
     }
