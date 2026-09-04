@@ -1077,3 +1077,22 @@ def test_a_plain_batcher_ignores_epochs():
     before = batcher.episodes
     batcher.new_epoch()
     assert batcher.episodes is before
+
+
+def test_a_fatal_move_is_recorded_as_an_action():
+    """The move that kills is still a move, and still a training target.
+
+    Reading it off the resulting pose loses it -- a snake that dies has no
+    resulting pose -- and the all-zero one-hot left behind is read by
+    argmax as a confident north, which is a lie about what it did.
+    """
+    from marlenv.core.snake import Direction
+    from marlenv.data.collect import _headings_after
+
+    headings = list(Direction)
+    up = headings.index(Direction.UP)
+    # straight, left, right from facing up
+    assert _headings_after([up, up, up], [0, 1, 2]).tolist() == [
+        up, headings.index(Direction.LEFT), headings.index(Direction.RIGHT)]
+    # an agent that is not playing has no heading to turn
+    assert _headings_after([-1, up], [0, 0]).tolist()[0] == -1
