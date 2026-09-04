@@ -31,6 +31,8 @@ import torch
 from datasets import load_from_disk
 
 from marlenv.flex_wm.model import FlexWorldModel
+from marlenv.flex_wm.batch import ResampledBatcher
+from marlenv.flex_wm.egocentric import egocentric_pairs, patch_offsets
 from marlenv.flex_wm.train import PairBatcher, flex_training_loss
 from marlenv.wm.madata import build_multi_sequences
 
@@ -43,6 +45,12 @@ def parse_args():
     p.add_argument('--components', nargs='+', default=['expert', 'explore'])
     p.add_argument('--episodes-per-component', type=int, default=None)
     p.add_argument('--val-fraction', type=float, default=0.05)
+    p.add_argument('--egocentric', action='store_true',
+                   help='train on what one agent could have seen, rather '
+                        'than on the whole board')
+    p.add_argument('--steps-per-epoch', type=int, default=None,
+                   help='steps between fresh viewpoints, egocentric only; '
+                        'defaults to one pass over the episodes')
     p.add_argument('--schedule', default='FAGFAGAAGAAG',
                    help='attention scope per block, repeated to fill the '
                         'depth; G alone is the older uniform behaviour')
@@ -132,6 +140,52 @@ def evaluate(model, batcher, args, batches=6, seed=1234):
     return totals / batches
 
 
+def egocentric_batchers(datasets, weights, dropouts, args, device):
+    """Train and validation batchers over one agent's account of events.
+
+    The episodes are split, not the viewpoints: every account of a held-out
+    episode is held out with it, so nothing the model saw from one seat is
+    scored from another.
+
+    Each batcher rebuilds its episodes from a fresh viewpoint every epoch,
+    which is why the sources are kept rather than the reconstructions.
+    """
+    from marlenv.data import decode_episode
+
+    sources, per_episode = [], []
+    for dataset, weight, dropout in zip(datasets, weights, dropouts):
+        for row in dataset:
+            sources.append(decode_episode(row))
+            per_episode.append((weight, dropout))
+
+    view = sources[0]['observations'].shape[2]
+    offsets = patch_offsets(view, 3)
+
+    def build(source, rng):
+        return egocentric_pairs(source, offsets, rng=rng, radius=view // 2)
+
+    order = np.random.default_rng(args.seed).permutation(len(sources))
+    cut = max(int(len(order) * (1 - args.val_fraction)), 1)
+
+    def batcher_over(indices, seed):
+        return ResampledBatcher(
+            [sources[i] for i in indices], build, args.context, seed=seed,
+            device=device,
+            weights=[per_episode[i][0] for i in indices],
+            dropouts=[per_episode[i][1] for i in indices])
+
+    batcher = batcher_over(order[:cut], args.seed)
+    validation = batcher_over(order[cut:], args.seed + 1)
+
+    pairs = sum(len(episode['time']) for episode in batcher.episodes)
+    seen = sum(int(episode['visible'].sum()) for episode in batcher.episodes)
+    tokens = pairs * batcher.episodes[0]['visible'].shape[1]
+    print(f'  {len(sources)} episodes -> {cut} train, '
+          f'{len(order) - cut} val, {pairs} pairs from one seat each, '
+          f'{seen / max(tokens, 1):.1%} of patches seen', flush=True)
+    return batcher, validation, view
+
+
 def main():
     args = parse_args()
     torch.manual_seed(args.seed)
@@ -163,19 +217,23 @@ def main():
               f'action weight {weights[len(datasets) - 1]:g}  '
               f'dropout {dropouts[len(datasets) - 1]:g}', flush=True)
 
-    sequences = build_multi_sequences(datasets, action_weights=weights,
-                                      action_dropouts=dropouts)
-    train_set, val_set = split(sequences, args.val_fraction, args.seed)
-    print(f'  {len(sequences["observations"])} episodes, '
-          f'{int(sequences["mask"].sum())} steps')
-
-    batcher = PairBatcher(train_set, args.context, seed=args.seed,
-                          device=device)
-    validation = PairBatcher(val_set, args.context, seed=args.seed + 1,
-                             device=device)
+    if args.egocentric:
+        batcher, validation, view = egocentric_batchers(
+            datasets, weights, dropouts, args, device)
+    else:
+        sequences = build_multi_sequences(datasets, action_weights=weights,
+                                          action_dropouts=dropouts)
+        train_set, val_set = split(sequences, args.val_fraction, args.seed)
+        view = sequences['observations'].shape[3]
+        print(f'  {len(sequences["observations"])} episodes, '
+              f'{int(sequences["mask"].sum())} steps', flush=True)
+        batcher = PairBatcher(train_set, args.context, seed=args.seed,
+                              device=device)
+        validation = PairBatcher(val_set, args.context, seed=args.seed + 1,
+                                 device=device)
 
     model = FlexWorldModel(
-        schedule=args.schedule, view=sequences['observations'].shape[3],
+        schedule=args.schedule, view=view,
         num_actions=4, frame='world', dim=args.dim, depth=args.depth,
         heads=args.heads).to(device)
     if saved is not None:
@@ -204,7 +262,7 @@ def main():
 
     def snapshot(step, history):
         torch.save({'model': model.state_dict(),
-                    'view': sequences['observations'].shape[3],
+                    'view': view,
                     'dim': args.dim, 'depth': args.depth,
                     'heads': args.heads, 'context': args.context,
                     'window': args.window, 'schedule': args.schedule,
@@ -219,8 +277,18 @@ def main():
         snapshot(0, [])
         print(f'  saved step 0 to {args.out}', flush=True)
 
+    if args.egocentric and args.steps_per_epoch is None:
+        args.steps_per_epoch = max(len(batcher.episodes) // args.batch_size,
+                                   1)
+        print(f'  fresh viewpoints every {args.steps_per_epoch} steps',
+              flush=True)
+
     history, window, start = [], [], time.time()
     for step in range(args.steps):
+        # training resamples viewpoints, validation does not: a val curve is
+        # only readable if the thing being scored stays put
+        if args.steps_per_epoch and step and step % args.steps_per_epoch == 0:
+            batcher.new_epoch()
         pairs, weight, dropout = batcher.pairs(args.batch_size, model,
                                                args.drop_retired)
         loss, frame_loss, action_loss = flex_training_loss(

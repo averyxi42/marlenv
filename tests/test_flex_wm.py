@@ -1153,3 +1153,82 @@ def test_a_death_gives_the_observer_its_last_action():
     ego = egocentric_episode(build(survives), offsets, ego=0, radius=4)
     assert ego.acted[:-1].all() and not ego.acted[-1], (
         'the end of an episode is the one place with no recorded action')
+
+
+def synthetic_episode(frames=10, agents=2, view=9):
+    """Two snakes side by side, both heading the same way throughout."""
+    poses = np.zeros((frames, agents, 3), np.int64)
+    alive = np.ones((frames, agents), bool)
+    cardinal = np.zeros((frames, agents, 4), np.int64)
+    cardinal[..., 1] = 1
+    for t in range(frames):
+        poses[t, 0] = (5, 5 + t, 1)
+        poses[t, 1] = (6, 5 + t, 1)
+    rng = np.random.default_rng(0)
+    return {'alive_mask': alive, 'poses': poses,
+            'observations': rng.integers(
+                0, 256, (frames, agents, view, view, 3), dtype=np.uint8),
+            'cardinal_actions': cardinal}
+
+
+def test_patch_offsets_match_the_model():
+    """The reconstruction places patches where the model reads them."""
+    from marlenv.flex_wm.egocentric import patch_offsets
+    from marlenv.wm.model import WorldModel
+
+    model = WorldModel(view=9, dim=32, depth=1, heads=4)
+    assert np.array_equal(patch_offsets(9, 3),
+                          model.patch_offsets('cpu').numpy())
+
+
+def test_a_pair_set_carries_every_field_a_batcher_crops():
+    """The egocentric shape is the one the batcher already knows."""
+    from marlenv.flex_wm.batch import FIELDS
+    from marlenv.flex_wm.egocentric import egocentric_pairs, patch_offsets
+
+    pairs = egocentric_pairs(synthetic_episode(), patch_offsets(9, 3),
+                             rng=np.random.default_rng(0))
+    assert set(FIELDS) <= set(pairs)
+    count = len(pairs['time'])
+    for name in FIELDS:
+        assert len(pairs[name]) == count, name
+    # every pair is a target; what is unknown is said per patch instead
+    assert pairs['trained'].all()
+    assert not pairs['visible'].all(), 'nothing was hidden from the observer'
+
+
+def test_a_resampled_batcher_sees_the_episode_from_a_new_seat():
+    """A second epoch is the same events told by someone else."""
+    from marlenv.flex_wm.batch import ResampledBatcher
+    from marlenv.flex_wm.egocentric import egocentric_pairs, patch_offsets
+
+    offsets = patch_offsets(9, 3)
+    sources = [synthetic_episode() for _ in range(4)]
+    batcher = ResampledBatcher(
+        sources, lambda source, rng: egocentric_pairs(source, offsets,
+                                                      rng=rng),
+        context=8, seed=0)
+
+    before = [episode['visible'].copy() for episode in batcher.episodes]
+    batcher.new_epoch()
+    after = [episode['visible'] for episode in batcher.episodes]
+    changed = sum(not (a.shape == b.shape and np.array_equal(a, b))
+                  for a, b in zip(before, after))
+    assert changed, 'every episode came back from the same viewpoint'
+
+
+def test_a_pair_set_batcher_takes_the_rectangular_call():
+    """One training loop drives either batcher."""
+    from marlenv.flex_wm.batch import ResampledBatcher
+    from marlenv.flex_wm.egocentric import egocentric_pairs, patch_offsets
+
+    offsets = patch_offsets(9, 3)
+    batcher = ResampledBatcher(
+        [synthetic_episode() for _ in range(3)],
+        lambda source, rng: egocentric_pairs(source, offsets, rng=rng),
+        context=6, seed=0)
+
+    pairs, weight, dropout = batcher.pairs(2, model=None, drop_retired=True)
+    assert pairs.observations.shape[0] == 2
+    assert weight.shape == (2,) and dropout.shape == (2,)
+    assert pairs.time.max() < 6, 'the crop outran its context'

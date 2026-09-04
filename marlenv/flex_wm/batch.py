@@ -82,6 +82,15 @@ class PairSetBatcher:
     def new_epoch(self):
         """Nothing to do: these episodes do not change between epochs."""
 
+    def pairs(self, size, model=None, drop_retired=True):
+        """Same call as the rectangular batcher, so a loop can take either.
+
+        The two arguments are accepted and ignored: a pair set has already
+        decided what it contains, and there is no rectangle left to drop
+        retired agents out of.
+        """
+        return self.batch(size)
+
     def crop(self, index):
         """One episode's pairs inside a randomly placed window."""
         episode = self.episodes[index]

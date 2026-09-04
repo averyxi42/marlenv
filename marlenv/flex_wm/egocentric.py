@@ -68,6 +68,20 @@ class EgoEpisode:
         return len(self.time)
 
 
+def patch_offsets(view, patch):
+    """Cell offset of each patch centre from the centre of a view.
+
+    The same geometry the model uses, without needing one built: the
+    reconstruction has to know where patches sit before there is a model to
+    ask.
+    """
+    grid = view // patch
+    radius = view // 2
+    index = np.arange(grid) * patch + patch // 2 - radius
+    rows, cols = np.meshgrid(index, index, indexing='ij')
+    return np.stack([rows.reshape(-1), cols.reshape(-1)], axis=-1)
+
+
 def head_in_view(watcher, target, radius):
     """Is ``target``'s head inside a view of ``radius`` around ``watcher``?"""
     return bool((np.abs(np.asarray(target) - np.asarray(watcher))
@@ -123,6 +137,21 @@ def cardinal_from_step(before, after):
         if heading.value == delta:
             return index
     return None
+
+
+def egocentric_pairs(episode, offsets, rng=None, radius=4, patch=3):
+    """An episode as a flat pair set, ready for a batcher.
+
+    The same reconstruction as :func:`egocentric_episode`, in the shape the
+    batcher crops. Every pair is a target -- what is unknown is said per
+    patch, by ``visible``, not by dropping the observation.
+    """
+    ego = egocentric_episode(episode, offsets, rng=rng, radius=radius,
+                             patch=patch)
+    return {'observations': ego.observations, 'actions': ego.actions,
+            'agent': ego.agent, 'time': ego.time, 'position': ego.position,
+            'visible': ego.visible, 'acted': ego.acted,
+            'trained': np.ones(len(ego), bool)}
 
 
 def egocentric_episode(episode, offsets, ego=None, rng=None, radius=4,
