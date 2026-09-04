@@ -4,6 +4,7 @@ import pytest
 
 torch = pytest.importorskip('torch')
 
+from marlenv.core.snake import Direction  # noqa: E402
 from marlenv.flex_wm.attention import (AGENT, FRAME, GLOBAL,  # noqa: E402
                                        parse_schedule, scope_mask)
 from marlenv.flex_wm.data import pairs_from_arrays, unflatten  # noqa: E402
@@ -331,3 +332,90 @@ def test_the_recorded_schedule_drives_the_masks(tmp_path):
 
     assert not torch.allclose(run('FAG'), run('G')), (
         'the schedule was recorded but not used')
+
+
+# ----------------------------------------------------------------- runner
+def runner_for(agents=3, schedule='G'):
+    from marlenv.flex_wm.runner import FlexRunner
+
+    _, model = shapes(agents=agents, schedule=schedule)
+    positions = [[0, 0], [4, 0], [0, 4]][:agents]
+    return model, FlexRunner(model, list(range(agents)), positions,
+                             window=8, device='cpu')
+
+
+def test_the_runner_keeps_the_history_it_was_given():
+    """Bookkeeping first: what went in must be what comes back out."""
+    torch.manual_seed(4)
+    model, runner = runner_for()
+    first = torch.randn(1, 1, 3, 9, 9, 3).clamp(-1, 1)
+    runner.reset(first)
+    assert torch.equal(runner.frames[0, -1], first[0, 0])
+
+    second = torch.randn(1, 1, 3, 9, 9, 3).clamp(-1, 1)
+    runner.observe(torch.tensor([0, 1, 2]), second,
+                   torch.tensor([True, True, True]))
+    assert torch.equal(runner.frames[0, -1], second[0, 0]), (
+        'the newest observation was not the one supplied')
+    assert runner.pairs.pairs == 6, 'a pair went missing'
+
+
+def test_denoising_leaves_the_history_alone():
+    """The step being generated must not overwrite what conditions it.
+
+    Filling the whole content tensor with noise instead of only the slot
+    being denoised erases the context, which shows up as a model that
+    generates confidently from nothing.
+    """
+    torch.manual_seed(5)
+    model, runner = runner_for()
+    first = torch.randn(1, 1, 3, 9, 9, 3).clamp(-1, 1)
+    runner.reset(first)
+    before = runner.pairs.observations.clone()
+
+    generator = torch.Generator().manual_seed(0)
+    runner.step(denoise_steps=2, action_steps=2, generator=generator)
+
+    assert torch.equal(runner.pairs.observations[:, :3], before), (
+        'generating a step disturbed the history it was conditioned on')
+
+
+def test_positions_dead_reckon_from_the_actions_taken():
+    from marlenv.wm.model import HEADINGS
+
+    torch.manual_seed(6)
+    model, runner = runner_for(agents=1)
+    runner.reset(torch.randn(1, 1, 1, 9, 9, 3).clamp(-1, 1))
+    start = runner.position[0].clone()
+
+    heading = HEADINGS.index(Direction.DOWN)
+    runner.observe(torch.tensor([heading]),
+                   torch.randn(1, 1, 1, 9, 9, 3).clamp(-1, 1))
+    moved = torch.tensor(Direction.DOWN.value)
+    assert torch.equal(runner.position[0], start + moved)
+
+
+def test_a_retired_agent_stops_contributing_pairs():
+    torch.manual_seed(7)
+    model, runner = runner_for()
+    runner.reset(torch.randn(1, 1, 3, 9, 9, 3).clamp(-1, 1))
+    runner.live[1] = False
+
+    before = runner.pairs.pairs
+    runner.observe(torch.tensor([0, 1, 2]),
+                   torch.randn(1, 1, 3, 9, 9, 3).clamp(-1, 1))
+    assert runner.pairs.pairs == before + 2, (
+        'a retired agent still added a pair')
+    assert runner.living == [0, 2]
+
+
+def test_the_window_bounds_the_history():
+    torch.manual_seed(8)
+    model, runner = runner_for(agents=1)
+    runner.reset(torch.randn(1, 1, 1, 9, 9, 3).clamp(-1, 1))
+    for _ in range(12):
+        runner.observe(torch.tensor([0]),
+                       torch.randn(1, 1, 1, 9, 9, 3).clamp(-1, 1))
+    assert runner.pairs.pairs <= 8, 'the window did not trim'
+    span = runner.pairs.time.max() - runner.pairs.time.min()
+    assert span < 8
