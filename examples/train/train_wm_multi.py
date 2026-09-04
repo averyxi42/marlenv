@@ -155,7 +155,7 @@ def main():
         datasets.append(dataset)
         print(f'  {name}: {len(dataset)} episodes  '
               f'action weight {weights[len(datasets) - 1]:g}  '
-              f'dropout {dropouts[len(datasets) - 1]:g}')
+              f'dropout {dropouts[len(datasets) - 1]:g}', flush=True)
 
     sequences = build_multi_sequences(datasets, action_weights=weights,
                                       action_dropouts=dropouts)
@@ -179,11 +179,13 @@ def main():
         note = (f' as {saved.get("depth", "?")} blocks grown to '
                 f'{args.depth}, {silenced} silenced duplicates'
                 if silenced else '')
-        print(f'  warm started from {args.init}{note}')
+        print(f'  warm started from {args.init}{note}',
+              flush=True)
     params = sum(p.numel() for p in model.parameters())
     print(f'device={device}  params={params / 1e6:.2f}M  agents={agents}  '
           f'context={args.context}  '
-          f'tokens/seq={args.context * model.tokens_per_step - agents}')
+          f'tokens/seq={args.context * model.tokens_per_step - agents}',
+          flush=True)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
                                   weight_decay=0.01, betas=(0.9, 0.95))
@@ -208,7 +210,7 @@ def main():
 
     if args.save_at_start:
         snapshot(0, [])
-        print(f'  saved step 0 to {args.out}')
+        print(f'  saved step 0 to {args.out}', flush=True)
 
     history, window, start = [], [], time.time()
     for step in range(args.steps):
