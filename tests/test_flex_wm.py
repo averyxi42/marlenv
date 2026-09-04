@@ -649,3 +649,24 @@ def test_the_single_agent_adapter_needs_to_be_told_its_action():
 
     adapter.step(fixed={1: 2}, denoise_steps=1)
     assert adapter.frames.shape == (1, 1, 3, 9, 9, 3)
+
+
+def test_every_package_imports_on_its_own():
+    """In a fresh interpreter, with nothing imported first.
+
+    A cycle between packages only shows up when the wrong one is imported
+    first, so a suite that has already pulled in half the tree will not
+    notice it. Each of these has to stand up unaided.
+    """
+    import subprocess
+    import sys
+
+    for module in ('marlenv', 'marlenv.wm', 'marlenv.flex_wm',
+                   'marlenv.grading', 'marlenv.grading.ratchet',
+                   'marlenv.grading.frames', 'marlenv.data',
+                   'marlenv.policies'):
+        done = subprocess.run([sys.executable, '-c', f'import {module}'],
+                              capture_output=True, text=True)
+        assert done.returncode == 0, (
+            f'{module} does not import on its own:\n'
+            + done.stderr.strip().splitlines()[-1])
