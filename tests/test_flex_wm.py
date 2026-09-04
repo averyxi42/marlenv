@@ -1394,3 +1394,57 @@ def test_the_observer_keeps_the_view_from_the_cell_it_died_entering():
     assert (after == 77).all(), 'the aftermath is not the frame kept'
     # it is a target like any other; it simply has no action after it
     assert pairs['trained'][own].all()
+
+
+def test_two_agents_agreeing_score_one_and_disagreeing_do_not():
+    """The consistency tally counts overlap, not whole views."""
+    from marlenv.core.palette import CELL_COLORS
+    from marlenv.core.snake import Cell
+    from marlenv.grading.consistency import NORTH, Agreement
+    from marlenv.wm.canvas import make_pose
+
+    view = 9
+    empty = np.array(CELL_COLORS[Cell.EMPTY.value][0], np.uint8)
+    wall = np.array(CELL_COLORS[Cell.WALL.value][0], np.uint8)
+
+    board = np.tile(empty, (20, 20, 1))
+    board[10, 10] = wall
+
+    def crop(row, col):
+        return board[row - 4:row + 5, col - 4:col + 5].copy()
+
+    # heads three apart, so their views overlap over most of the board
+    poses = [make_pose(10, 9, NORTH), make_pose(10, 12, NORTH)]
+    views = [crop(10, 9), crop(10, 12)]
+
+    same = Agreement()
+    same.add(poses, views, views, [True, True])
+    agree, cells = same.rate(same.dream)
+    assert cells > 0 and agree == 1.0
+
+    # one agent forgets the wall; exactly one shared cell now differs
+    spoiled = [views[0], views[1].copy()]
+    spoiled[1][4, 4 - 2] = empty
+    other = Agreement()
+    other.add(poses, spoiled, views, [True, True])
+    wrong, total = other.rate(other.dream)
+    assert total == cells
+    assert round((1 - wrong) * total) == 1, 'exactly one cell should differ'
+    # and the truth beside it is untouched
+    assert other.rate(other.truth)[0] == 1.0
+
+
+def test_a_dead_agent_is_not_asked_to_agree():
+    """Only living agents are paired."""
+    from marlenv.core.palette import CELL_COLORS
+    from marlenv.core.snake import Cell
+    from marlenv.grading.consistency import NORTH, Agreement
+    from marlenv.wm.canvas import make_pose
+
+    empty = np.array(CELL_COLORS[Cell.EMPTY.value][0], np.uint8)
+    views = [np.tile(empty, (9, 9, 1)) for _ in range(3)]
+    poses = [make_pose(10, 9 + 2 * i, NORTH) for i in range(3)]
+
+    tally = Agreement()
+    tally.add(poses, views, views, [True, True, False])
+    assert tally.pairs == 1, 'the dead agent was paired anyway'
