@@ -69,6 +69,7 @@ class FlexRunner:
     def reset(self, observations):
         """Seed with a real first observation, ``(1, 1, n, v, v, c)``."""
         self.reset_state()
+        self.latest = observations.clone()
         self.pairs = self._new_pairs(observations[:, 0], self.living,
                                      actions=None)
         self.actions_known = torch.zeros(1, self.pairs.pairs,
@@ -89,7 +90,19 @@ class FlexRunner:
                             device=self.device),
             position=self.position[index][None])
 
-    def _append(self, extra, known):
+    def _remember(self, frames, agents):
+        """Hold the newest observation per agent, ready to report.
+
+        Scanning the history for it costs a Python pass over every pair
+        with a device synchronisation each; measured against a full step it
+        was five times the price of the work itself.
+        """
+        index = torch.tensor(agents, dtype=torch.long, device=self.device)
+        self.latest[0, 0, index] = frames[0]
+
+    def _append(self, extra, known, agents=None):
+        if agents is not None:
+            self._remember(extra.observations, agents)
         join = lambda a, b: torch.cat([a, b], dim=1)
         self.pairs = PairBatch(
             observations=join(self.pairs.observations, extra.observations),
@@ -209,13 +222,14 @@ class FlexRunner:
         extra = self._new_pairs(blank, alive)
         known = torch.zeros(1, len(alive), dtype=torch.bool,
                             device=self.device)
-        self._append(extra, known)
+        self._append(extra, known, alive)
 
         target = torch.zeros(1, self.pairs.pairs, dtype=torch.bool,
                              device=self.device)
         target[0, -len(alive):] = True
         frames = self._denoise(target, steps, generator, frame_slot=True)
         self.pairs.observations[0, -len(alive):] = frames[0, -len(alive):]
+        self._remember(frames[:, -len(alive):], alive)
         return frames[:, -len(alive):], alive
 
     def retire(self, frames, alive):
@@ -252,20 +266,7 @@ class FlexRunner:
         pair, so its slot keeps the last observation it did have; nothing
         downstream should read those, and the alive flags say which.
         """
-        shape = self.pairs.observations.shape[2:]
-        latest = torch.zeros(1, 1, self.num_agents, *shape,
-                             device=self.device)
-        seen = {}
-        for slot in range(self.pairs.pairs):
-            if not bool(self.pairs.valid[0, slot]):
-                continue
-            who = int(self.pairs.agent[0, slot])
-            when = int(self.pairs.time[0, slot])
-            if seen.get(who, -1) <= when:
-                seen[who] = when
-                index = (self.agents == who).nonzero()[0, 0]
-                latest[0, 0, index] = self.pairs.observations[0, slot]
-        return latest
+        return self.latest
 
     @torch.no_grad()
     def observe(self, actions, frames, live=None):
@@ -300,7 +301,7 @@ class FlexRunner:
             return
         extra = self._new_pairs(frames[:, 0], alive)
         self._append(extra, torch.zeros(1, len(alive), dtype=torch.bool,
-                                        device=self.device))
+                                        device=self.device), alive)
 
     def step(self, fixed=None, denoise_steps=12, action_steps=4,
              generator=None):
@@ -442,7 +443,7 @@ class CachedFlexRunner(FlexRunner):
 
         fresh.observations[:] = content
         self._append(fresh, torch.zeros(1, len(alive), dtype=torch.bool,
-                                        device=self.device))
+                                        device=self.device), alive)
         self.frontier = fresh
         return content, alive
 
@@ -471,5 +472,5 @@ class CachedFlexRunner(FlexRunner):
             return
         fresh = self._new_pairs(frames[:, 0], alive)
         self._append(fresh, torch.zeros(1, len(alive), dtype=torch.bool,
-                                        device=self.device))
+                                        device=self.device), alive)
         self.frontier = fresh

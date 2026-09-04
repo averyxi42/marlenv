@@ -560,3 +560,30 @@ def test_the_cache_holds_what_was_committed():
     per_pair = model.tokens_per_pair
     assert len(runner.cache) == 2 * per_pair, (
         'a finished pair did not reach the cache')
+
+
+def test_reporting_the_newest_frames_does_not_scan_the_history():
+    """It is read far more often than the step it reports on.
+
+    Reconstructing it from the pair set means a Python pass over every pair
+    with a device synchronisation each, which cost five times the step
+    itself and grew with the window. Holding it instead keeps the cost
+    flat, so this pins that the history is not being walked.
+    """
+    from marlenv.flex_wm.runner import CachedFlexRunner
+
+    _, model = shapes(agents=2, depth=3, schedule='FAG')
+    torch.manual_seed(11)
+    runner = CachedFlexRunner(model, [0, 1], [[0, 0], [3, 0]], window=16,
+                              device='cpu')
+    runner.reset(torch.randn(1, 1, 2, 9, 9, 3).clamp(-1, 1))
+
+    newest = None
+    for _ in range(6):
+        newest = torch.randn(1, 1, 2, 9, 9, 3).clamp(-1, 1)
+        runner.observe(torch.tensor([0, 1]), newest.clone())
+
+    assert torch.equal(runner.frames, newest), (
+        'the reported frames are not the newest ones')
+    # held rather than derived: no dependence on how much history there is
+    assert runner.frames is runner.latest
