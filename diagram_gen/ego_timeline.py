@@ -52,8 +52,11 @@ INK = (236, 236, 242)
 MUTED = (132, 132, 144)
 DIM = (70, 70, 82)
 ACCENT = (250, 208, 92)
-ROW_INK = [(120, 210, 255), (255, 150, 170), (170, 255, 160),
-           (220, 170, 255)]
+# one per identity, never per snake: two visits by the same snake must not
+# share a colour, or the picture claims a link the observer does not have
+IDENTITY_INK = [(120, 210, 255), (255, 150, 170), (170, 255, 160),
+                (220, 170, 255), (255, 196, 120), (140, 240, 230),
+                (200, 200, 120), (240, 160, 230)]
 ARROWS = {0: (-1, 0), 1: (0, 1), 2: (1, 0), 3: (0, -1)}
 
 
@@ -216,6 +219,14 @@ def view_image(view, visible, cell):
     return image
 
 
+def joystick(draw, cx, top, colour):
+    """A small pixel-art stick, the customary mark for an action."""
+    draw.rectangle([cx - 3, top, cx + 2, top + 4], fill=colour)
+    draw.rectangle([cx - 1, top + 4, cx, top + 8], fill=colour)
+    draw.rectangle([cx - 5, top + 8, cx + 4, top + 10], fill=colour)
+    draw.rectangle([cx - 7, top + 10, cx + 6, top + 13], fill=colour)
+
+
 def arrow(draw, box, action, colour):
     """A cardinal arrow for the action taken from a frame."""
     x0, y0, x1, y1 = box
@@ -264,6 +275,10 @@ def compose(episode, ego, start, pairs, args, radius):
         lanes.setdefault(held.get(int(identity), -1), []).append(int(identity))
     order_of = {snake: index for index, snake
                 in enumerate(sorted(lanes))}
+    ink_of = {0: ACCENT}
+    for number, identity in enumerate(
+            sorted(i for lane in lanes.values() for i in lane)):
+        ink_of[identity] = IDENTITY_INK[number % len(IDENTITY_INK)]
 
     rows = len(lanes) + 2
     width = margin * 2 + label + steps * column + (steps - 1) * gap
@@ -280,6 +295,10 @@ def compose(episode, ego, start, pairs, args, radius):
               'a row is one real snake; a bubble is one identity the '
               'observer assigned. two bubbles on a row are the same snake, '
               'which the observer cannot know.', fill=MUTED, font=tiny)
+    draw.text((margin, margin + 40),
+              'every identity has its own colour; the snake names are our '
+              'bookkeeping and reach the model nowhere.', fill=MUTED,
+              font=tiny)
 
     key = width - margin - 268
     for offset, (shade, note) in enumerate((
@@ -300,8 +319,8 @@ def compose(episode, ego, start, pairs, args, radius):
         draw.text((left(index) + column / 2 - 14, margin + head - 54),
                   f't={start + index}', fill=MUTED, font=small)
 
-    def draw_row(order, identities, colour, name, note):
-        draw.text((margin, band(order) + tile / 2 - 16), name, fill=colour,
+    def draw_row(order, identities, name, note):
+        draw.text((margin, band(order) + tile / 2 - 16), name, fill=INK,
                   font=small)
         draw.text((margin, band(order) + tile / 2 + 4), note, fill=MUTED,
                   font=tiny)
@@ -311,6 +330,7 @@ def compose(episode, ego, start, pairs, args, radius):
             draw.rectangle(box, outline=PANEL)
 
         for identity in identities:
+            colour = ink_of[identity]
             rows_of = pairs['agent'] == identity
             columns = [index for index in range(steps)
                        if (rows_of & (pairs['time'] == start + index)).any()]
@@ -327,11 +347,16 @@ def compose(episode, ego, start, pairs, args, radius):
                 spot = (x, band(order), x + picture.width,
                         band(order) + picture.height)
                 if pairs['acted'][row] and index < steps - 1:
-                    arrow(draw, (spot[2] + 6,
-                                 spot[1] + tile / 2 - gap / 2 + 4,
-                                 spot[2] + gap - 6,
-                                 spot[1] + tile / 2 + gap / 2 - 4),
-                          int(pairs['actions'][row]), colour)
+                    # arrow and stick read as one mark, so it is the point
+                    # between their centres that sits level with the tile,
+                    # not the arrow alone
+                    tall, drop, stick = 22, 26, 13
+                    middle = (tall / 2 + drop + stick / 2) / 2
+                    top = spot[1] + tile / 2 - middle
+                    arrow(draw, (spot[2] + 4, top, spot[2] + gap - 4,
+                                 top + tall), int(pairs['actions'][row]),
+                          colour)
+                    joystick(draw, spot[2] + gap / 2, top + drop, colour)
 
             # the bubble: where this identity begins and ends
             first, last = min(columns), max(columns)
@@ -353,10 +378,9 @@ def compose(episode, ego, start, pairs, args, radius):
             draw.text((tag_x, bubble[1] - 19), tag, fill=colour, font=tiny)
 
     for snake, identities in sorted(lanes.items()):
-        order = order_of[snake]
-        draw_row(order, identities, ROW_INK[order % len(ROW_INK)],
-                 f'snake {chr(65 + snake)}', 'recovered, in view')
-    draw_row(len(lanes), [0], ACCENT, 'the observer',
+        draw_row(order_of[snake], identities, f'snake {chr(65 + snake)}',
+                 'recovered, in view')
+    draw_row(len(lanes), [0], 'the observer',
              f'snake {chr(65 + ego)}, complete')
 
     order = rows - 1
