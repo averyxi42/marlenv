@@ -1,0 +1,223 @@
+"""The flexible formulation must generalise the old one, not replace it."""
+import numpy as np
+import pytest
+
+torch = pytest.importorskip('torch')
+
+from marlenv.flex_wm.attention import (AGENT, FRAME, GLOBAL,  # noqa: E402
+                                       parse_schedule, scope_mask)
+from marlenv.flex_wm.data import pairs_from_arrays, unflatten  # noqa: E402
+from marlenv.flex_wm.model import FlexWorldModel  # noqa: E402
+from marlenv.wm.multiagent import (MultiAgentWorldModel,  # noqa: E402
+                                   actions_to_signal)
+
+
+def shapes(agents=3, steps=5, dim=64, depth=3, heads=4, schedule='G'):
+    torch.manual_seed(0)
+    old = MultiAgentWorldModel(num_agents=agents, view=9, num_actions=4,
+                               frame='world', dim=dim, depth=depth,
+                               heads=heads)
+    new = FlexWorldModel(schedule=schedule, view=9, num_actions=4,
+                         frame='world', dim=dim, depth=depth, heads=heads)
+    new.load_state_dict(old.state_dict())
+    return old.eval(), new.eval()
+
+
+def sample(batch=2, steps=5, agents=3):
+    torch.manual_seed(1)
+    frames = torch.randn(batch, steps, agents, 9, 9, 3).clamp(-1, 1)
+    # trailing layout: every observation has an action, which is the pair
+    actions = torch.randint(0, 4, (batch, steps, agents))
+    origins = torch.zeros(batch, agents, 2, dtype=torch.long)
+    origins[:, 1, 0] = 4
+    origins[:, 2, 1] = -3
+    return frames, actions, origins
+
+
+# ------------------------------------------------------------ equivalence
+def test_all_global_reproduces_the_old_model_exactly():
+    """The generalisation has to contain what it generalises."""
+    old, new = shapes()
+    frames, actions, origins = sample()
+    signal = actions_to_signal(actions, 4)
+    alive = torch.ones(*actions.shape, dtype=torch.bool)
+    frame_tau = torch.rand(*actions.shape)
+    action_tau = torch.rand(*actions.shape)
+
+    with torch.no_grad():
+        want_frames, want_actions = old(
+            frames, signal, frame_tau, action_tau, origins=origins,
+            action_indices=actions, alive=alive)
+
+        pairs = pairs_from_arrays(frames, actions, origins, alive,
+                                  model=old)
+        flat = lambda x: x.reshape(x.shape[0], -1, *x.shape[3:])
+        got_frames, got_actions = new(
+            pairs, pairs.observations, flat(signal), flat(frame_tau),
+            flat(action_tau))
+
+    steps, agents = actions.shape[1], actions.shape[2]
+    got_frames = unflatten(got_frames, steps, agents)
+    got_actions = unflatten(got_actions, steps, agents)
+
+    assert torch.allclose(got_frames, want_frames, atol=1e-5), (
+        (got_frames - want_frames).abs().max().item())
+    assert torch.allclose(got_actions, want_actions, atol=1e-5)
+
+
+def test_a_checkpoint_moves_between_the_two():
+    """Same module names, so the weights are interchangeable both ways."""
+    old, new = shapes(schedule='FAG')
+    assert set(old.state_dict()) == set(new.state_dict())
+    old.load_state_dict(new.state_dict())
+
+
+# ----------------------------------------------------------------- scopes
+def attrs(steps=3, agents=2, per_frame=4):
+    """Token attributes for a tiny sequence, laid out pair by pair."""
+    time, agent, is_action = [], [], []
+    for step in range(steps):
+        for who in range(agents):
+            time += [step] * (per_frame + 1)
+            agent += [who] * (per_frame + 1)
+            is_action += [False] * per_frame + [True]
+    to = lambda x, d=torch.long: torch.tensor([x], dtype=d)
+    return to(time), to(agent), to(is_action, torch.bool)
+
+
+def test_the_scopes_nest():
+    """Frame is inside agent is inside global, by construction."""
+    time, agent, is_action = attrs()
+    frame = scope_mask(FRAME, time, agent, is_action)
+    within = scope_mask(AGENT, time, agent, is_action)
+    everywhere = scope_mask(GLOBAL, time, agent, is_action)
+
+    assert (frame <= within).all(), 'frame reaches outside agent'
+    assert (within <= everywhere).all(), 'agent reaches outside global'
+    assert not torch.equal(frame, within), 'the scopes are not distinct'
+    assert not torch.equal(within, everywhere)
+
+
+def test_frame_scope_is_one_observation():
+    """And an action sees its own observation, but never the reverse."""
+    time, agent, is_action = attrs(steps=2, agents=2, per_frame=4)
+    mask = scope_mask(FRAME, time, agent, is_action)[0, 0]
+
+    # the first pair occupies tokens 0..4, the second 5..9
+    assert mask[0, :4].all(), 'patches cannot see their own frame'
+    assert not mask[0, 4], 'an observation saw the action taken from it'
+    assert mask[4, :4].all(), 'the action cannot see its own observation'
+    assert not mask[0, 5:].any(), 'frame scope reached another pair'
+
+
+def test_agent_scope_ignores_the_other_agent():
+    time, agent, is_action = attrs(steps=3, agents=2, per_frame=4)
+    mask = scope_mask(AGENT, time, agent, is_action)[0, 0]
+    other = (agent[0][None, :] != agent[0][:, None])
+
+    assert not (mask & other).any(), 'agent scope crossed identities'
+    # but it does reach back in time within its own
+    assert mask[10, 0], 'agent scope lost its own history'
+
+
+def test_ids_are_compared_not_indexed():
+    """Sparse, arbitrarily large identities behave like small ones."""
+    time, agent, is_action = attrs(steps=2, agents=2, per_frame=4)
+    huge = torch.where(agent == 1, torch.full_like(agent, 10 ** 9), agent)
+
+    small = scope_mask(AGENT, time, agent, is_action)
+    large = scope_mask(AGENT, time, huge, is_action)
+    assert torch.equal(small, large)
+
+
+def test_a_schedule_must_tile_the_depth():
+    assert parse_schedule('AG', 4) == ['A', 'G', 'A', 'G']
+    with pytest.raises(ValueError, match='does not tile'):
+        parse_schedule('FAG', 4)
+    with pytest.raises(ValueError, match='unknown attention scope'):
+        parse_schedule('FXG', 3)
+
+
+# ----------------------------------------------------------------- window
+def test_the_training_window_matches_what_a_rollout_sees():
+    """A crop wider than the window trains the same computation it plays.
+
+    Without it, a token late in a long crop is trained seeing more history
+    than the sliding cache will ever give it, which is the gap the option
+    exists to close.
+    """
+    from marlenv.flex_wm.attention import scope_mask
+
+    steps, agents, per_frame = 8, 1, 4
+    time, agent, is_action = attrs(steps, agents, per_frame)
+    window = 3
+    mask = scope_mask(GLOBAL, time, agent, is_action, window=window)[0, 0]
+
+    last = time[0, -1].item()
+    for query in range(mask.shape[0]):
+        reach = time[0][mask[query]]
+        if reach.numel():
+            span = time[0][query] - reach.min()
+            assert span < window, 'a token saw past the window'
+
+    # and the deepest token really does have the full window available
+    deepest = mask.shape[0] - 1
+    seen = time[0][mask[deepest]].unique()
+    assert len(seen) == window, 'the window was not filled'
+    assert seen.max() == last
+
+
+def test_the_window_is_inert_when_the_crop_is_the_window():
+    time, agent, is_action = attrs(steps=4, agents=2, per_frame=4)
+    unlimited = scope_mask(GLOBAL, time, agent, is_action)
+    windowed = scope_mask(GLOBAL, time, agent, is_action, window=4)
+    assert torch.equal(unlimited, windowed)
+
+
+def test_padding_never_attracts_attention():
+    """And a padded row still has itself, so attention cannot go NaN."""
+    from marlenv.flex_wm.attention import scope_mask
+
+    time, agent, is_action = attrs(steps=2, agents=2, per_frame=4)
+    valid = torch.ones_like(is_action)
+    valid[0, -5:] = False                     # the last pair is padding
+    mask = scope_mask(GLOBAL, time, agent, is_action, valid=valid)[0, 0]
+
+    assert not mask[:-5, -5:].any(), 'a real token attended to padding'
+    assert mask.any(dim=-1).all(), 'a row with nothing to attend to'
+
+
+def test_a_loss_runs_over_a_set_of_pairs():
+    from marlenv.flex_wm.train import flex_training_loss
+
+    _, model = shapes(schedule='FAG')
+    frames, actions, origins = sample()
+    alive = torch.ones(*actions.shape, dtype=torch.bool)
+    pairs = pairs_from_arrays(frames, actions, origins, alive, model=model)
+
+    generator = torch.Generator().manual_seed(0)
+    loss, frame_loss, action_loss = flex_training_loss(
+        model, pairs, window=3, generator=generator)
+    assert torch.isfinite(loss) and float(frame_loss.detach()) > 0
+    loss.backward()
+    assert model.blocks[0].attn.qkv.weight.grad is not None
+
+
+def test_the_agent_count_may_change_between_steps():
+    """A set of pairs has no agent axis to be inconsistent about."""
+    from marlenv.flex_wm.pairs import PairBatch
+    from marlenv.flex_wm.train import flex_training_loss
+
+    _, model = shapes(schedule='FAG')
+    torch.manual_seed(2)
+    # step 0 has two agents, step 1 has three, one of them brand new
+    time = torch.tensor([[0, 0, 1, 1, 1]])
+    agent = torch.tensor([[7, 9, 7, 9, 400]])
+    pairs = PairBatch(observations=torch.randn(1, 5, 9, 9, 3).clamp(-1, 1),
+                      actions=torch.randint(0, 4, (1, 5)),
+                      agent=agent, time=time,
+                      position=torch.zeros(1, 5, 2, dtype=torch.long))
+
+    loss, _, _ = flex_training_loss(model, pairs,
+                                    generator=torch.Generator().manual_seed(0))
+    assert torch.isfinite(loss)
