@@ -156,37 +156,115 @@ A stronger version of this experiment would drop the geometric embedding
 for a learned one and make the model find the spatial relationship in the
 data. That is a separate run and is not set up here.
 
-#### What the three arms measured
+#### Inter-agent agreement: how it is measured
 
-At 24000 steps each, on gradient-free data with the expert policy driving
-the bootstrap. Agreement is between two agents' dreamt views on the cells
-they both cover, over snake cells only, because background and wall are
-five sixths of any overlap and a model that draws less snake scores better
-on the total for that reason alone. The truth scored the same way returns
-1.0000 for all three, which is the control.
+Every other measure in this repository scores one agent's view against the
+truth. This one scores two agents against *each other*, and it exists
+because the architecture could be answering the question on the model's
+behalf. Positions are axial RoPE over time, row and column, so two agents'
+tokens already carry their true spatial offset; a model could place a snake
+in the same spot in both views because the embedding says where it is,
+never having learned that two accounts of one board must agree.
 
-| arm | agreement, snake cells | dreamt length vs true, steps 45-59 | lost | gained |
-| --- | --- | --- | --- | --- |
-| solo | 0.016 | 7.86 vs 7.90 | 0.413 | 0.114 |
-| egocentric | 0.800 | 11.64 vs 7.90 | 0.119 | 0.510 |
-| every record | 0.852 | 5.93 vs 7.90 | 0.321 | 0.025 |
+`marlenv/grading/consistency.py`, driven by
+`examples/analysis/grade_consistency.py`:
 
-The first column answers the confound. The solo model has the same
-embedding, and so is handed the same true offset between any two agents,
-and it agrees with itself about snake cells 1.6% of the time -- one view
-draws a snake where the other draws bare board. The geometry does not
-produce inter-agent consistency; the 0.80 above it was learned.
+1. Roll the model forward from a bootstrap prefix played by the search that
+   collected the data, on a board with the same settings the data was
+   collected under. Every agent's action at every step is **forced to the
+   simulator's**, so dream and truth stay on one trajectory.
+2. At each step take every agent's dreamt view. These are north-up already,
+   the frame the model works in, so no rotation is applied -- passing a
+   north pose to `unrotate_view` is the identity, checked rather than
+   assumed.
+3. For each unordered pair of *living* agents, intersect the two views'
+   world footprints. Footprints come from dead reckoning, which is exact
+   here precisely because the actions were forced: the overlap is where the
+   views really meet, not where a drifting model imagines they do. Pairs
+   whose views do not meet contribute nothing; that is absence of evidence,
+   not disagreement.
+4. Decode both windows to palette classes and add the pair to a confusion
+   matrix of (class one agent drew, class the other drew). The diagonal is
+   agreement.
 
-The other columns are why that is not a clean win. The three arms fail in
-three different directions: the egocentric model draws snake where there is
-none, the fully-recorded one erodes it, and the solo one does both at once
-in roughly equal measure -- which is why its dreamt length tracks the truth
-best of the three while its agreement is at the floor. Length is a marginal
-statistic and a model can get it right with no coherent joint structure at
-all. Reporting either number alone would have been misleading.
+Two properties make the number readable.
 
-None of the three saw a death frame, so none of this speaks to how they
-model dying.
+**The truth is scored the same way, alongside.** Real views of one board
+agree with each other perfectly, so this control must return 1.0000. It
+does, for every arm. A harness that lined views up wrongly would fail there
+first, rather than being read as a model that contradicts itself -- which
+is the mistake this measurement is most likely to produce.
+
+**The headline is agreement over snake cells only.** Background and wall
+are roughly five sixths of any overlap, so the total is mostly a count of
+empty board, and a model that draws less snake scores better on it for that
+reason and no other. Snake cells are where the question lives.
+
+Sample sizes below: 12 episodes, 60 steps, giving 1552 agent pairs and
+29218 overlapping cells; identical for every arm, since the environment,
+the bootstrap policy and the per-episode generators are all seeded and the
+harness is deterministic. Rows measured in separate invocations are
+therefore directly comparable, which is why each arm was measured once
+rather than re-measured together.
+
+#### What the arms scored
+
+Agreement over snake cells; ratchet columns at rollout steps 45-59, where
+the true length is 7.90. The first three rows are 24000 steps each, the
+warm starts a further 16000 at a third the learning rate, with the
+observer's death frames restored.
+
+| arm | agreement | cells drawn | dreamt length | lost | gained |
+| --- | --- | --- | --- | --- | --- |
+| solo | 0.016 | 2725 | 7.86 | 0.413 | 0.114 |
+| egocentric | 0.800 | 5809 | 11.64 | 0.119 | 0.510 |
+| every record | 0.852 | 3910 | 5.93 | 0.321 | 0.025 |
+| solo, warm | 0.020 | 2142 | 5.07 | 0.613 | 0.064 |
+| egocentric, warm | 0.748 | 5048 | 7.62 | 0.235 | 0.269 |
+
+The first column answers the confound and keeps answering it. The solo
+model carries the same embedding and is handed the same true offset between
+any two agents, and it agrees with itself about snake cells 1.6% of the
+time -- one view draws a snake where the other draws bare board. Sixteen
+thousand further steps move that to 2.0%. The geometry does not produce
+inter-agent consistency at any training budget, so the 0.75 to 0.80 above
+it was learned from data, and from one agent's record at that.
+
+The remaining columns are why this is not a clean win, and they are worth
+reading together. The arms fail in different directions: the egocentric
+model draws snake where there is none, the fully-recorded one erodes snake
+that is there, and the original solo run does both at once in roughly equal
+measure -- which is why its dreamt length tracks the truth better than
+either while its agreement sits at the floor. **Length is a marginal
+statistic and agreement is a joint one, and they move independently.**
+Either alone would have told a false story: on length the solo model looks
+best, on agreement its failure is total.
+
+Canvas coverage cannot separate the arms at all -- 0.87, 0.86 and 0.84 --
+because the canvas is stitched from dead reckoned poses and so looks
+coherent whatever the model believes about other agents. It ranks the solo
+model first. That is the measurement this one had to replace.
+
+#### What the warm starts do and do not show
+
+Both warm starts move the same way on the ratchet: more `lost`, less
+`gained`. The egocentric model was over-drawing, so the shift put it on the
+true length; the solo model was balanced, so the same shift pushed it into
+heavy erosion. A death frame is a target in which a snake stops existing,
+which is gradient toward drawing less snake, and that is consistent with a
+uniform shift whose sign of benefit depends only on where a model started.
+Restoring the death frames is a bias shift, not a repair.
+
+Neither warm start separates the death frames from 16000 further steps at a
+lower learning rate. A continuation with `--drop-death-frames` would be the
+control and has not been run. The wall agreement fell in both arms (0.979
+to 0.871, and 0.898 to 0.853), which at least says that regression is not
+something about egocentric data.
+
+The ceiling was not warm started, so it has neither the death frames nor
+the extra steps, and it trained on the fatal actions the collector was
+recording wrongly at the time. Comparisons against it that touch dying are
+not fair and are not made here.
 
 ### Growing a trained model deeper
 
