@@ -67,6 +67,38 @@ def spent(image, font):
     return faded
 
 
+def pacing(panels, length):
+    """How long to show each merged frame.
+
+    Panels that have finished do not set the pace, and neither does a
+    panel's own final frame: a rollout ends on a long hold, and counting it
+    would stall the tiling -- for every frame after the shortest rollout
+    finished, and for one frame wherever any panel ended. The hold belongs
+    at the end of the tiling and nowhere inside it.
+    """
+    out = []
+    for index in range(length):
+        live = [pace(ms, index) for ms in panels]
+        live = [ms for ms in live if ms is not None]
+        out.append(max(live) if live else max(ms[-1] for ms in panels))
+    if out:
+        out[-1] = max(ms[-1] for ms in panels)
+    return out
+
+
+def pace(durations, index):
+    """How long this panel says frame ``index`` should show, or None.
+
+    None once the panel has finished, and for its own final frame, whose
+    duration is the hold a rollout ends on rather than a rate.
+    """
+    if index >= len(durations):
+        return None
+    if index == len(durations) - 1 and len(durations) > 1:
+        return durations[index - 1]
+    return durations[index]
+
+
 def font_for(size):
     for name in ('DejaVuSans.ttf', 'DejaVuSans-Bold.ttf'):
         try:
@@ -115,7 +147,7 @@ def main():
     finished = [spent(frames[-1], tiny) for frames, _ in panels]
 
     length = max(len(frames) for frames, _ in panels)
-    merged, timings = [], []
+    merged = []
     for index in range(length):
         frame = canvas.copy()
         for x, (frames, _), done in zip(lefts, panels, finished):
@@ -123,7 +155,7 @@ def main():
             frame.paste(done if index >= len(frames) else frames[index],
                         (x, body))
         merged.append(frame)
-        timings.append(max(ms[min(index, len(ms) - 1)] for _, ms in panels))
+    timings = pacing([ms for _, ms in panels], length)
 
     # one palette for the whole gif: left to itself PIL picks a fresh
     # adaptive palette per frame, and the captions -- identical pixels

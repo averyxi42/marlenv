@@ -1448,3 +1448,45 @@ def test_a_dead_agent_is_not_asked_to_agree():
     tally = Agreement()
     tally.add(poses, views, views, [True, True, False])
     assert tally.pairs == 1, 'the dead agent was paired anyway'
+
+
+def load_tiler():
+    """The diagram script, imported by path: it is not a package."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parent.parent / 'diagram_gen'
+    spec = importlib.util.spec_from_file_location(
+        'tile_rollouts', path / 'tile_rollouts.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_a_finished_panel_does_not_slow_the_tiling():
+    """A rollout ends on a long hold; that hold is not a frame rate.
+
+    This went wrong twice. Counting a finished panel dragged every frame
+    after the shortest rollout ended, and then counting a panel's own last
+    frame left a stall wherever any panel finished.
+    """
+    tiler = load_tiler()
+    short = [160] * 2 + [1200]          # ends at frame 3 of 6
+    long_ = [160] * 5 + [1200]
+
+    timings = tiler.pacing([short, long_], 6)
+    assert timings[:-1] == [160] * 5, f'something stalled: {timings}'
+    assert timings[-1] == 1200, 'the tiling should end on a hold'
+
+
+def test_one_panel_keeps_its_own_pacing():
+    """With nothing to reconcile, the tiling is the panel it was given."""
+    tiler = load_tiler()
+    assert tiler.pacing([[80, 90, 100, 1200]], 4) == [80, 90, 100, 1200]
+
+
+def test_a_panel_that_never_ends_early_is_paced_by_the_slowest():
+    """Equal lengths: each frame waits for whichever panel is slowest."""
+    tiler = load_tiler()
+    assert tiler.pacing([[100, 100, 500], [160, 90, 500]], 3) == [160, 100,
+                                                                  500]
