@@ -210,19 +210,27 @@ rather than re-measured together.
 #### What the arms scored
 
 Agreement over snake cells; ratchet columns at rollout steps 45-59, where
-the true length is 7.90. The first three rows are 24000 steps each, the
-warm starts a further 16000 at a third the learning rate, with the
-observer's death frames restored.
+the true length is 7.90; survival is how many of 240 rollout steps pass
+before every viewpoint is retired, at `--death-patience 1`.
 
-| arm | agreement | cells drawn | dreamt length | lost | gained |
-| --- | --- | --- | --- | --- | --- |
-| solo | 0.016 | 2725 | 7.86 | 0.413 | 0.114 |
-| egocentric | 0.800 | 5809 | 11.64 | 0.119 | 0.510 |
-| every record | 0.852 | 3910 | 5.93 | 0.321 | 0.025 |
-| solo, warm | 0.020 | 2142 | 5.07 | 0.613 | 0.064 |
-| egocentric, warm | 0.748 | 5048 | 7.62 | 0.235 | 0.269 |
+Each arm was trained 24000 steps and then warm started for a further 16000
+at a third the learning rate. What that warm start changed is **not the
+same for every arm**: the two single-record arms gained the observer's
+death frames along with the extra steps, while the ceiling gained only the
+steps, because the rectangular path selects on alive-or-trained and has
+always kept the aftermath frame. The trio is matched on budget, not on
+treatment.
 
-The first column answers the confound and keeps answering it. The solo
+| arm | steps | agreement | dreamt length | lost | gained | survival |
+| --- | --- | --- | --- | --- | --- | --- |
+| solo | 24000 | 0.016 | 7.86 | 0.413 | 0.114 | - |
+| egocentric | 24000 | 0.800 | 11.64 | 0.119 | 0.510 | - |
+| ceiling | 24000 | 0.852 | 5.93 | 0.321 | 0.025 | 28 |
+| solo | 40000 | 0.020 | 5.07 | 0.613 | 0.064 | 181 |
+| egocentric | 40000 | 0.748 | 7.62 | 0.235 | 0.269 | 240 |
+| ceiling | 40000 | 0.876 | 4.65 | 0.463 | 0.062 | 204 |
+
+The agreement column answers the confound and keeps answering it. The solo
 model carries the same embedding and is handed the same true offset between
 any two agents, and it agrees with itself about snake cells 1.6% of the
 time -- one view draws a snake where the other draws bare board. Sixteen
@@ -230,20 +238,29 @@ thousand further steps move that to 2.0%. The geometry does not produce
 inter-agent consistency at any training budget, so the 0.75 to 0.80 above
 it was learned from data, and from one agent's record at that.
 
-The remaining columns are why this is not a clean win, and they are worth
-reading together. The arms fail in different directions: the egocentric
-model draws snake where there is none, the fully-recorded one erodes snake
-that is there, and the original solo run does both at once in roughly equal
-measure -- which is why its dreamt length tracks the truth better than
-either while its agreement sits at the floor. **Length is a marginal
-statistic and agreement is a joint one, and they move independently.**
-Either alone would have told a false story: on length the solo model looks
-best, on agreement its failure is total.
+At matched budget the egocentric model reaches 85% of the ceiling's
+agreement, which is less flattering than the 94% the two 24000-step
+checkpoints happened to show. Both pairings are in the table because
+picking the better one would be picking a number.
 
-Canvas coverage cannot separate the arms at all -- 0.87, 0.86 and 0.84 --
-because the canvas is stitched from dead reckoned poses and so looks
-coherent whatever the model believes about other agents. It ranks the solo
-model first. That is the measurement this one had to replace.
+No arm is best at everything, and the disagreements between columns are the
+point. The egocentric model is the only one whose dreamt length tracks the
+truth and the only one to survive all 240 steps, while the ceiling is the
+most self-consistent and dreams snakes barely half the true length. The
+solo model at 24000 steps tracked length better than either while agreeing
+with itself almost never. **Length is a marginal statistic and agreement is
+a joint one; a model can get the first right with no coherent joint
+structure whatever.** Any single column here tells a false story.
+
+Canvas coverage tells no story at all: 0.87, 0.86 and 0.84 for the three
+24000-step arms. It cannot separate them, and it ranks the solo model
+first, because the canvas is stitched from dead reckoned poses and so looks
+coherent whatever the model believes about other agents. That is the
+measurement inter-agent agreement had to replace.
+
+Survival separates the arms only at `--death-patience 1`. At 2 and 3 every
+arm runs the full 240 steps, so a rollout at the default setting shows
+three models that look equally healthy.
 
 #### What the warm starts do and do not show
 
@@ -261,10 +278,17 @@ control and has not been run. The wall agreement fell in both arms (0.979
 to 0.871, and 0.898 to 0.853), which at least says that regression is not
 something about egocentric data.
 
-The ceiling was not warm started, so it has neither the death frames nor
-the extra steps, and it trained on the fatal actions the collector was
-recording wrongly at the time. Comparisons against it that touch dying are
-not fair and are not made here.
+The ceiling's own warm start is the closest thing to that control that
+exists here, since for it the death frames were never the variable. It
+gained 16000 steps and nothing else, and it moved a long way: agreement
+from 0.852 to 0.876, survival from 28 steps to 204, and erosion deeper,
+dreaming 4.65 against a true 7.90 where it had dreamt 5.93. Extra steps
+alone are clearly not inert, so the egocentric arm's improvement cannot be
+attributed to the death frames on the strength of these runs.
+
+The ceiling also trained on the fatal actions the collector was recording
+wrongly at the time, in both of its runs. Comparisons against it that turn
+on how an agent dies are not fair and are not made here.
 
 ### Growing a trained model deeper
 
