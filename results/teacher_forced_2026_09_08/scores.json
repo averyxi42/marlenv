@@ -1,0 +1,3863 @@
+{
+  "instrument": "teacher_forced_v1",
+  "runtime": {
+    "git_revision": "28283bbb2978ec9df43a3a5e41f1ff14e7b11c0a",
+    "python": "3.14.7",
+    "numpy": "2.5.2",
+    "torch": "2.11.0+cu128"
+  },
+  "recording_manifest": {
+    "format_version": 1,
+    "metadata": {
+      "environment": {
+        "height": 15,
+        "width": 15,
+        "num_snakes": 3,
+        "num_fruits": 4,
+        "view_radius": 4,
+        "obstacle_density": 0.12,
+        "observation_noise": 2.0,
+        "snake_noise_sigma": 8.0,
+        "noise_period": 3,
+        "background_gradient": 0.0,
+        "gradient_period": 6,
+        "reward_dict": {
+          "fruit": 1.0,
+          "kill": 0.0,
+          "lose": -5.0,
+          "win": 0.0,
+          "time": 0.01
+        }
+      },
+      "search": {
+        "objective": "sum",
+        "num_simulations": 16,
+        "max_depth": 24,
+        "max_joint_actions": 4,
+        "exploration_fraction": 0.0
+      },
+      "policy": "/home/avery/codes/qcwm/marlenv/marlenv/demodata/az_policy.pt",
+      "policy_sha256": "2da2d8af7ac37a72f6d17a0c5c5a10750717a757b45e1c733ab721a4c56d4dcd",
+      "requested_steps": 60,
+      "runtime": {
+        "git_revision": "28283bbb2978ec9df43a3a5e41f1ff14e7b11c0a",
+        "python": "3.14.7",
+        "numpy": "2.5.2",
+        "torch": "2.11.0+cu128"
+      }
+    },
+    "recordings": [
+      {
+        "file": "episode_2100.npz",
+        "sha256": "2b16341be97d021bca556d966d38318209315d8365b29c8b0a1451963d78159b",
+        "seed": 2100,
+        "steps": 60
+      },
+      {
+        "file": "episode_2101.npz",
+        "sha256": "e977dd04a5cccaf08849d0d533ed256e565ba0eaa66cd2037b21297648b8c5cf",
+        "seed": 2101,
+        "steps": 60
+      },
+      {
+        "file": "episode_2102.npz",
+        "sha256": "4c05b7f933e01b92b3f27049971df09c77a064441cffab0ae881e737c5df1b83",
+        "seed": 2102,
+        "steps": 60
+      },
+      {
+        "file": "episode_2103.npz",
+        "sha256": "5e8b042c4019d15c86cba31fef131e2da76d421ec4b13df625a509e026da93bc",
+        "seed": 2103,
+        "steps": 60
+      },
+      {
+        "file": "episode_2104.npz",
+        "sha256": "fb54d383771d9ca3cd3a3edc0ba22f9771a951d7c6ded87783d4ea9d427154f6",
+        "seed": 2104,
+        "steps": 60
+      },
+      {
+        "file": "episode_2105.npz",
+        "sha256": "b2fc2783bfd51b06ded61382173e262eb66ec10e719d077c117316d117fe30dc",
+        "seed": 2105,
+        "steps": 60
+      },
+      {
+        "file": "episode_2106.npz",
+        "sha256": "7cc05e0ba601da239d8337bcd81a6b056c95dc23c20f4a5b346ed60c0100b323",
+        "seed": 2106,
+        "steps": 60
+      },
+      {
+        "file": "episode_2107.npz",
+        "sha256": "7fdd9a0b9749d26268120bf21721552d03d16c4e63900166152e14bf95df6033",
+        "seed": 2107,
+        "steps": 60
+      },
+      {
+        "file": "episode_2108.npz",
+        "sha256": "850d312ce6ed1808f7553ad290506b6f2ae8b33978cacab8b1c55cc8854964ab",
+        "seed": 2108,
+        "steps": 60
+      },
+      {
+        "file": "episode_2109.npz",
+        "sha256": "98ae070bd530c933d9034167437ae2afbb732eeb6bfd2082047ae9783fdf776f",
+        "seed": 2109,
+        "steps": 60
+      },
+      {
+        "file": "episode_2110.npz",
+        "sha256": "d0dcd677b5e79daa2c68a22cd35081dd11261fce5e50a414ef3143c218480233",
+        "seed": 2110,
+        "steps": 60
+      },
+      {
+        "file": "episode_2111.npz",
+        "sha256": "e8b43db4813f04e2853cc2bf2e776cdc2753289678793274c3d91c75a741c596",
+        "seed": 2111,
+        "steps": 60
+      }
+    ]
+  },
+  "recording_manifest_sha256": "e917ccb6a98351820375b8f152088654e6db2033e677285412878e958c79e1d6",
+  "settings": {
+    "window": 48,
+    "denoise_steps": 12,
+    "first_target": 1,
+    "seed": 0,
+    "device": "cuda",
+    "conditioning": "all available real agent views before target",
+    "targets": "all agents alive before the action, including fatal transitions",
+    "snake_metric": "exact class matches / cells where either view is snake"
+  },
+  "models": [
+    {
+      "name": "solo24",
+      "checkpoint": "/home/avery/codes/qcwm/marlenv/marlenv/demodata/flex_solo/model_step24000.pt",
+      "checkpoint_sha256": "890b3ce780d9293290e89ffd84ab5a2af435cfd241f644eb4dd6995a5763ec63",
+      "schedule": "FAGFAGAAGAAG",
+      "training_context": 80,
+      "training_window": 48,
+      "scores": {
+        "steps": 720,
+        "views": 2062,
+        "death_views": 4,
+        "overlapping_pairs": 1609,
+        "consistency": {
+          "cells": 38827,
+          "exact": 33418,
+          "snake_union": 7596,
+          "snake_exact": 2485,
+          "snake_both": 4053,
+          "all_exact_rate": 0.8606897262214438,
+          "snake_exact_rate": 0.3271458662453923,
+          "snake_occupancy_iou": 0.5335703001579779
+        },
+        "truth_control": {
+          "cells": 38827,
+          "exact": 38827,
+          "snake_union": 5837,
+          "snake_exact": 5837,
+          "snake_both": 5837,
+          "all_exact_rate": 1.0,
+          "snake_exact_rate": 1.0,
+          "snake_occupancy_iou": 1.0
+        },
+        "accuracy": {
+          "cells": 167022,
+          "exact": 158229,
+          "snake_union": 19771,
+          "snake_exact": 11841,
+          "snake_both": 14484,
+          "all_exact_rate": 0.9473542407587024,
+          "snake_exact_rate": 0.5989074907693086,
+          "snake_occupancy_iou": 0.7325881341358556
+        },
+        "death_accuracy": {
+          "cells": 324,
+          "exact": 285,
+          "snake_union": 46,
+          "snake_exact": 10,
+          "snake_both": 16,
+          "all_exact_rate": 0.8796296296296297,
+          "snake_exact_rate": 0.21739130434782608,
+          "snake_occupancy_iou": 0.34782608695652173
+        }
+      },
+      "episodes": [
+        {
+          "seed": 2100,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 153,
+          "consistency": {
+            "cells": 4356,
+            "exact": 3627,
+            "snake_union": 991,
+            "snake_exact": 302,
+            "snake_both": 526,
+            "all_exact_rate": 0.8326446280991735,
+            "snake_exact_rate": 0.30474268415741673,
+            "snake_occupancy_iou": 0.5307769929364279
+          },
+          "truth_control": {
+            "cells": 4356,
+            "exact": 4356,
+            "snake_union": 773,
+            "snake_exact": 773,
+            "snake_both": 773,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13676,
+            "snake_union": 1903,
+            "snake_exact": 1070,
+            "snake_both": 1361,
+            "all_exact_rate": 0.937997256515775,
+            "snake_exact_rate": 0.5622700998423542,
+            "snake_occupancy_iou": 0.7151865475564898
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2101,
+          "steps": 60,
+          "views": 157,
+          "death_views": 1,
+          "overlapping_pairs": 104,
+          "consistency": {
+            "cells": 2343,
+            "exact": 2052,
+            "snake_union": 377,
+            "snake_exact": 104,
+            "snake_both": 187,
+            "all_exact_rate": 0.8758002560819462,
+            "snake_exact_rate": 0.27586206896551724,
+            "snake_occupancy_iou": 0.4960212201591512
+          },
+          "truth_control": {
+            "cells": 2343,
+            "exact": 2343,
+            "snake_union": 270,
+            "snake_exact": 270,
+            "snake_both": 270,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 12717,
+            "exact": 12128,
+            "snake_union": 1445,
+            "snake_exact": 943,
+            "snake_both": 1095,
+            "all_exact_rate": 0.9536840449791617,
+            "snake_exact_rate": 0.6525951557093426,
+            "snake_occupancy_iou": 0.7577854671280276
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 66,
+            "snake_union": 17,
+            "snake_exact": 3,
+            "snake_both": 5,
+            "all_exact_rate": 0.8148148148148148,
+            "snake_exact_rate": 0.17647058823529413,
+            "snake_occupancy_iou": 0.29411764705882354
+          }
+        },
+        {
+          "seed": 2102,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 155,
+          "consistency": {
+            "cells": 3521,
+            "exact": 3058,
+            "snake_union": 629,
+            "snake_exact": 197,
+            "snake_both": 315,
+            "all_exact_rate": 0.8685032661175802,
+            "snake_exact_rate": 0.31319554848966613,
+            "snake_occupancy_iou": 0.5007949125596184
+          },
+          "truth_control": {
+            "cells": 3521,
+            "exact": 3521,
+            "snake_union": 457,
+            "snake_exact": 457,
+            "snake_both": 457,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13793,
+            "snake_union": 1642,
+            "snake_exact": 923,
+            "snake_both": 1171,
+            "all_exact_rate": 0.9460219478737997,
+            "snake_exact_rate": 0.5621193666260658,
+            "snake_occupancy_iou": 0.7131546894031668
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2103,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 147,
+          "consistency": {
+            "cells": 3994,
+            "exact": 3348,
+            "snake_union": 996,
+            "snake_exact": 374,
+            "snake_both": 599,
+            "all_exact_rate": 0.8382573860791187,
+            "snake_exact_rate": 0.3755020080321285,
+            "snake_occupancy_iou": 0.6014056224899599
+          },
+          "truth_control": {
+            "cells": 3994,
+            "exact": 3994,
+            "snake_union": 831,
+            "snake_exact": 831,
+            "snake_both": 831,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13642,
+            "snake_union": 2288,
+            "snake_exact": 1420,
+            "snake_both": 1731,
+            "all_exact_rate": 0.9356652949245542,
+            "snake_exact_rate": 0.6206293706293706,
+            "snake_occupancy_iou": 0.7565559440559441
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2104,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 133,
+          "consistency": {
+            "cells": 2990,
+            "exact": 2692,
+            "snake_union": 394,
+            "snake_exact": 116,
+            "snake_both": 182,
+            "all_exact_rate": 0.9003344481605351,
+            "snake_exact_rate": 0.29441624365482233,
+            "snake_occupancy_iou": 0.4619289340101523
+          },
+          "truth_control": {
+            "cells": 2990,
+            "exact": 2990,
+            "snake_union": 283,
+            "snake_exact": 283,
+            "snake_both": 283,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13954,
+            "snake_union": 1392,
+            "snake_exact": 834,
+            "snake_both": 1010,
+            "all_exact_rate": 0.9570644718792867,
+            "snake_exact_rate": 0.5991379310344828,
+            "snake_occupancy_iou": 0.7255747126436781
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2105,
+          "steps": 60,
+          "views": 164,
+          "death_views": 1,
+          "overlapping_pairs": 125,
+          "consistency": {
+            "cells": 3193,
+            "exact": 2682,
+            "snake_union": 739,
+            "snake_exact": 256,
+            "snake_both": 411,
+            "all_exact_rate": 0.8399624177889132,
+            "snake_exact_rate": 0.34641407307171856,
+            "snake_occupancy_iou": 0.5561569688768606
+          },
+          "truth_control": {
+            "cells": 3193,
+            "exact": 3193,
+            "snake_union": 575,
+            "snake_exact": 575,
+            "snake_both": 575,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 13284,
+            "exact": 12534,
+            "snake_union": 1649,
+            "snake_exact": 984,
+            "snake_both": 1193,
+            "all_exact_rate": 0.9435411020776875,
+            "snake_exact_rate": 0.5967252880533657,
+            "snake_occupancy_iou": 0.7234687689508793
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 72,
+            "snake_union": 15,
+            "snake_exact": 6,
+            "snake_both": 9,
+            "all_exact_rate": 0.8888888888888888,
+            "snake_exact_rate": 0.4,
+            "snake_occupancy_iou": 0.6
+          }
+        },
+        {
+          "seed": 2106,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 144,
+          "consistency": {
+            "cells": 3246,
+            "exact": 2789,
+            "snake_union": 657,
+            "snake_exact": 223,
+            "snake_both": 355,
+            "all_exact_rate": 0.859211337030191,
+            "snake_exact_rate": 0.3394216133942161,
+            "snake_occupancy_iou": 0.5403348554033486
+          },
+          "truth_control": {
+            "cells": 3246,
+            "exact": 3246,
+            "snake_union": 495,
+            "snake_exact": 495,
+            "snake_both": 495,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13827,
+            "snake_union": 1634,
+            "snake_exact": 950,
+            "snake_both": 1168,
+            "all_exact_rate": 0.9483539094650206,
+            "snake_exact_rate": 0.5813953488372093,
+            "snake_occupancy_iou": 0.7148102815177478
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2107,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 168,
+          "consistency": {
+            "cells": 3506,
+            "exact": 3053,
+            "snake_union": 682,
+            "snake_exact": 258,
+            "snake_both": 378,
+            "all_exact_rate": 0.8707929264118653,
+            "snake_exact_rate": 0.3782991202346041,
+            "snake_occupancy_iou": 0.5542521994134897
+          },
+          "truth_control": {
+            "cells": 3506,
+            "exact": 3506,
+            "snake_union": 538,
+            "snake_exact": 538,
+            "snake_both": 538,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13817,
+            "snake_union": 1897,
+            "snake_exact": 1213,
+            "snake_both": 1423,
+            "all_exact_rate": 0.9476680384087791,
+            "snake_exact_rate": 0.6394306800210859,
+            "snake_occupancy_iou": 0.750131787032156
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2108,
+          "steps": 60,
+          "views": 121,
+          "death_views": 1,
+          "overlapping_pairs": 38,
+          "consistency": {
+            "cells": 818,
+            "exact": 724,
+            "snake_union": 116,
+            "snake_exact": 30,
+            "snake_both": 55,
+            "all_exact_rate": 0.8850855745721271,
+            "snake_exact_rate": 0.25862068965517243,
+            "snake_occupancy_iou": 0.47413793103448276
+          },
+          "truth_control": {
+            "cells": 818,
+            "exact": 818,
+            "snake_union": 85,
+            "snake_exact": 85,
+            "snake_both": 85,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 9801,
+            "exact": 9501,
+            "snake_union": 845,
+            "snake_exact": 588,
+            "snake_both": 664,
+            "all_exact_rate": 0.9693908784817876,
+            "snake_exact_rate": 0.6958579881656805,
+            "snake_occupancy_iou": 0.7857988165680473
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 74,
+            "snake_union": 7,
+            "snake_exact": 1,
+            "snake_both": 2,
+            "all_exact_rate": 0.9135802469135802,
+            "snake_exact_rate": 0.14285714285714285,
+            "snake_occupancy_iou": 0.2857142857142857
+          }
+        },
+        {
+          "seed": 2109,
+          "steps": 60,
+          "views": 180,
+          "death_views": 1,
+          "overlapping_pairs": 159,
+          "consistency": {
+            "cells": 4439,
+            "exact": 3868,
+            "snake_union": 680,
+            "snake_exact": 136,
+            "snake_both": 294,
+            "all_exact_rate": 0.8713674250957423,
+            "snake_exact_rate": 0.2,
+            "snake_occupancy_iou": 0.4323529411764706
+          },
+          "truth_control": {
+            "cells": 4439,
+            "exact": 4439,
+            "snake_union": 507,
+            "snake_exact": 507,
+            "snake_both": 507,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13732,
+            "snake_union": 1522,
+            "snake_exact": 727,
+            "snake_both": 998,
+            "all_exact_rate": 0.9418381344307271,
+            "snake_exact_rate": 0.4776609724047306,
+            "snake_occupancy_iou": 0.6557161629434954
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 73,
+            "snake_union": 7,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": 0.9012345679012346,
+            "snake_exact_rate": 0.0,
+            "snake_occupancy_iou": 0.0
+          }
+        },
+        {
+          "seed": 2110,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 152,
+          "consistency": {
+            "cells": 3641,
+            "exact": 3122,
+            "snake_union": 779,
+            "snake_exact": 287,
+            "snake_both": 431,
+            "all_exact_rate": 0.8574567426531172,
+            "snake_exact_rate": 0.3684210526315789,
+            "snake_occupancy_iou": 0.5532734274711169
+          },
+          "truth_control": {
+            "cells": 3641,
+            "exact": 3641,
+            "snake_union": 587,
+            "snake_exact": 587,
+            "snake_both": 587,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13776,
+            "snake_union": 1817,
+            "snake_exact": 1083,
+            "snake_both": 1340,
+            "all_exact_rate": 0.9448559670781893,
+            "snake_exact_rate": 0.5960374243258117,
+            "snake_occupancy_iou": 0.7374793615850302
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2111,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 131,
+          "consistency": {
+            "cells": 2780,
+            "exact": 2403,
+            "snake_union": 556,
+            "snake_exact": 202,
+            "snake_both": 320,
+            "all_exact_rate": 0.8643884892086331,
+            "snake_exact_rate": 0.36330935251798563,
+            "snake_occupancy_iou": 0.5755395683453237
+          },
+          "truth_control": {
+            "cells": 2780,
+            "exact": 2780,
+            "snake_union": 436,
+            "snake_exact": 436,
+            "snake_both": 436,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13849,
+            "snake_union": 1737,
+            "snake_exact": 1106,
+            "snake_both": 1330,
+            "all_exact_rate": 0.9498628257887517,
+            "snake_exact_rate": 0.6367299942429476,
+            "snake_occupancy_iou": 0.7656879677605066
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        }
+      ],
+      "elapsed_seconds": 66.14155476299993
+    },
+    {
+      "name": "ego24",
+      "checkpoint": "/home/avery/codes/qcwm/marlenv/marlenv/demodata/flex_ego/model_step24000.pt",
+      "checkpoint_sha256": "4500b0de2be59f5e9993ee6cc6c9c4d7f68475be92f62f8d8344c2a3f256fe96",
+      "schedule": "FAGFAGAAGAAG",
+      "training_context": 80,
+      "training_window": 48,
+      "scores": {
+        "steps": 720,
+        "views": 2062,
+        "death_views": 4,
+        "overlapping_pairs": 1609,
+        "consistency": {
+          "cells": 38827,
+          "exact": 37155,
+          "snake_union": 6379,
+          "snake_exact": 4824,
+          "snake_both": 5789,
+          "all_exact_rate": 0.9569371828881964,
+          "snake_exact_rate": 0.7562313842295031,
+          "snake_occupancy_iou": 0.9075090139520301
+        },
+        "truth_control": {
+          "cells": 38827,
+          "exact": 38827,
+          "snake_union": 5837,
+          "snake_exact": 5837,
+          "snake_both": 5837,
+          "all_exact_rate": 1.0,
+          "snake_exact_rate": 1.0,
+          "snake_occupancy_iou": 1.0
+        },
+        "accuracy": {
+          "cells": 167022,
+          "exact": 163028,
+          "snake_union": 17384,
+          "snake_exact": 14078,
+          "snake_both": 15984,
+          "all_exact_rate": 0.9760869825531966,
+          "snake_exact_rate": 0.8098251265531523,
+          "snake_occupancy_iou": 0.9194661757938334
+        },
+        "death_accuracy": {
+          "cells": 324,
+          "exact": 295,
+          "snake_union": 40,
+          "snake_exact": 14,
+          "snake_both": 19,
+          "all_exact_rate": 0.9104938271604939,
+          "snake_exact_rate": 0.35,
+          "snake_occupancy_iou": 0.475
+        }
+      },
+      "episodes": [
+        {
+          "seed": 2100,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 153,
+          "consistency": {
+            "cells": 4356,
+            "exact": 4093,
+            "snake_union": 837,
+            "snake_exact": 588,
+            "snake_both": 765,
+            "all_exact_rate": 0.939623507805326,
+            "snake_exact_rate": 0.7025089605734767,
+            "snake_occupancy_iou": 0.9139784946236559
+          },
+          "truth_control": {
+            "cells": 4356,
+            "exact": 4356,
+            "snake_union": 773,
+            "snake_exact": 773,
+            "snake_both": 773,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14176,
+            "snake_union": 1671,
+            "snake_exact": 1321,
+            "snake_both": 1544,
+            "all_exact_rate": 0.9722908093278464,
+            "snake_exact_rate": 0.7905445840813884,
+            "snake_occupancy_iou": 0.9239976062238181
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2101,
+          "steps": 60,
+          "views": 157,
+          "death_views": 1,
+          "overlapping_pairs": 104,
+          "consistency": {
+            "cells": 2343,
+            "exact": 2266,
+            "snake_union": 287,
+            "snake_exact": 219,
+            "snake_both": 259,
+            "all_exact_rate": 0.9671361502347418,
+            "snake_exact_rate": 0.7630662020905923,
+            "snake_occupancy_iou": 0.9024390243902439
+          },
+          "truth_control": {
+            "cells": 2343,
+            "exact": 2343,
+            "snake_union": 270,
+            "snake_exact": 270,
+            "snake_both": 270,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 12717,
+            "exact": 12476,
+            "snake_union": 1251,
+            "snake_exact": 1089,
+            "snake_both": 1175,
+            "all_exact_rate": 0.9810489895415585,
+            "snake_exact_rate": 0.8705035971223022,
+            "snake_occupancy_iou": 0.9392486011191047
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 70,
+            "snake_union": 15,
+            "snake_exact": 5,
+            "snake_both": 6,
+            "all_exact_rate": 0.8641975308641975,
+            "snake_exact_rate": 0.3333333333333333,
+            "snake_occupancy_iou": 0.4
+          }
+        },
+        {
+          "seed": 2102,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 155,
+          "consistency": {
+            "cells": 3521,
+            "exact": 3330,
+            "snake_union": 527,
+            "snake_exact": 357,
+            "snake_both": 457,
+            "all_exact_rate": 0.9457540471456972,
+            "snake_exact_rate": 0.6774193548387096,
+            "snake_occupancy_iou": 0.8671726755218216
+          },
+          "truth_control": {
+            "cells": 3521,
+            "exact": 3521,
+            "snake_union": 457,
+            "snake_exact": 457,
+            "snake_both": 457,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14174,
+            "snake_union": 1449,
+            "snake_exact": 1098,
+            "snake_both": 1295,
+            "all_exact_rate": 0.972153635116598,
+            "snake_exact_rate": 0.7577639751552795,
+            "snake_occupancy_iou": 0.893719806763285
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2103,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 147,
+          "consistency": {
+            "cells": 3994,
+            "exact": 3807,
+            "snake_union": 874,
+            "snake_exact": 697,
+            "snake_both": 811,
+            "all_exact_rate": 0.9531797696544817,
+            "snake_exact_rate": 0.7974828375286042,
+            "snake_occupancy_iou": 0.9279176201372997
+          },
+          "truth_control": {
+            "cells": 3994,
+            "exact": 3994,
+            "snake_union": 831,
+            "snake_exact": 831,
+            "snake_both": 831,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14162,
+            "snake_union": 2066,
+            "snake_exact": 1700,
+            "snake_both": 1913,
+            "all_exact_rate": 0.9713305898491084,
+            "snake_exact_rate": 0.8228460793804453,
+            "snake_occupancy_iou": 0.92594385285576
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2104,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 133,
+          "consistency": {
+            "cells": 2990,
+            "exact": 2906,
+            "snake_union": 309,
+            "snake_exact": 234,
+            "snake_both": 272,
+            "all_exact_rate": 0.9719063545150501,
+            "snake_exact_rate": 0.7572815533980582,
+            "snake_occupancy_iou": 0.8802588996763754
+          },
+          "truth_control": {
+            "cells": 2990,
+            "exact": 2990,
+            "snake_union": 283,
+            "snake_exact": 283,
+            "snake_both": 283,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14340,
+            "snake_union": 1186,
+            "snake_exact": 993,
+            "snake_both": 1102,
+            "all_exact_rate": 0.9835390946502057,
+            "snake_exact_rate": 0.8372681281618887,
+            "snake_occupancy_iou": 0.9291736930860034
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2105,
+          "steps": 60,
+          "views": 164,
+          "death_views": 1,
+          "overlapping_pairs": 125,
+          "consistency": {
+            "cells": 3193,
+            "exact": 3021,
+            "snake_union": 635,
+            "snake_exact": 469,
+            "snake_both": 570,
+            "all_exact_rate": 0.9461321641089884,
+            "snake_exact_rate": 0.7385826771653543,
+            "snake_occupancy_iou": 0.8976377952755905
+          },
+          "truth_control": {
+            "cells": 3193,
+            "exact": 3193,
+            "snake_union": 575,
+            "snake_exact": 575,
+            "snake_both": 575,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 13284,
+            "exact": 12906,
+            "snake_union": 1461,
+            "snake_exact": 1152,
+            "snake_both": 1310,
+            "all_exact_rate": 0.9715447154471545,
+            "snake_exact_rate": 0.7885010266940452,
+            "snake_occupancy_iou": 0.8966461327857632
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 73,
+            "snake_union": 15,
+            "snake_exact": 7,
+            "snake_both": 10,
+            "all_exact_rate": 0.9012345679012346,
+            "snake_exact_rate": 0.4666666666666667,
+            "snake_occupancy_iou": 0.6666666666666666
+          }
+        },
+        {
+          "seed": 2106,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 144,
+          "consistency": {
+            "cells": 3246,
+            "exact": 3119,
+            "snake_union": 544,
+            "snake_exact": 427,
+            "snake_both": 501,
+            "all_exact_rate": 0.9608749229821318,
+            "snake_exact_rate": 0.7849264705882353,
+            "snake_occupancy_iou": 0.9209558823529411
+          },
+          "truth_control": {
+            "cells": 3246,
+            "exact": 3246,
+            "snake_union": 495,
+            "snake_exact": 495,
+            "snake_both": 495,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14250,
+            "snake_union": 1397,
+            "snake_exact": 1119,
+            "snake_both": 1296,
+            "all_exact_rate": 0.977366255144033,
+            "snake_exact_rate": 0.8010021474588404,
+            "snake_occupancy_iou": 0.9277022190408017
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2107,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 168,
+          "consistency": {
+            "cells": 3506,
+            "exact": 3367,
+            "snake_union": 581,
+            "snake_exact": 450,
+            "snake_both": 520,
+            "all_exact_rate": 0.9603536794067313,
+            "snake_exact_rate": 0.774526678141136,
+            "snake_occupancy_iou": 0.8950086058519794
+          },
+          "truth_control": {
+            "cells": 3506,
+            "exact": 3506,
+            "snake_union": 538,
+            "snake_exact": 538,
+            "snake_both": 538,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14253,
+            "snake_union": 1677,
+            "snake_exact": 1411,
+            "snake_both": 1560,
+            "all_exact_rate": 0.9775720164609053,
+            "snake_exact_rate": 0.8413834227787717,
+            "snake_occupancy_iou": 0.9302325581395349
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2108,
+          "steps": 60,
+          "views": 121,
+          "death_views": 1,
+          "overlapping_pairs": 38,
+          "consistency": {
+            "cells": 818,
+            "exact": 794,
+            "snake_union": 93,
+            "snake_exact": 72,
+            "snake_both": 81,
+            "all_exact_rate": 0.9706601466992665,
+            "snake_exact_rate": 0.7741935483870968,
+            "snake_occupancy_iou": 0.8709677419354839
+          },
+          "truth_control": {
+            "cells": 818,
+            "exact": 818,
+            "snake_union": 85,
+            "snake_exact": 85,
+            "snake_both": 85,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 9801,
+            "exact": 9663,
+            "snake_union": 748,
+            "snake_exact": 650,
+            "snake_both": 697,
+            "all_exact_rate": 0.9859198041016223,
+            "snake_exact_rate": 0.8689839572192514,
+            "snake_occupancy_iou": 0.9318181818181818
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 76,
+            "snake_union": 6,
+            "snake_exact": 2,
+            "snake_both": 3,
+            "all_exact_rate": 0.9382716049382716,
+            "snake_exact_rate": 0.3333333333333333,
+            "snake_occupancy_iou": 0.5
+          }
+        },
+        {
+          "seed": 2109,
+          "steps": 60,
+          "views": 180,
+          "death_views": 1,
+          "overlapping_pairs": 159,
+          "consistency": {
+            "cells": 4439,
+            "exact": 4273,
+            "snake_union": 576,
+            "snake_exact": 421,
+            "snake_both": 526,
+            "all_exact_rate": 0.9626041901329129,
+            "snake_exact_rate": 0.7309027777777778,
+            "snake_occupancy_iou": 0.9131944444444444
+          },
+          "truth_control": {
+            "cells": 4439,
+            "exact": 4439,
+            "snake_union": 507,
+            "snake_exact": 507,
+            "snake_both": 507,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14202,
+            "snake_union": 1309,
+            "snake_exact": 963,
+            "snake_both": 1172,
+            "all_exact_rate": 0.9740740740740741,
+            "snake_exact_rate": 0.7356760886172651,
+            "snake_occupancy_iou": 0.8953399541634836
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 76,
+            "snake_union": 4,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": 0.9382716049382716,
+            "snake_exact_rate": 0.0,
+            "snake_occupancy_iou": 0.0
+          }
+        },
+        {
+          "seed": 2110,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 152,
+          "consistency": {
+            "cells": 3641,
+            "exact": 3495,
+            "snake_union": 652,
+            "snake_exact": 511,
+            "snake_both": 593,
+            "all_exact_rate": 0.959901126064268,
+            "snake_exact_rate": 0.7837423312883436,
+            "snake_occupancy_iou": 0.9095092024539877
+          },
+          "truth_control": {
+            "cells": 3641,
+            "exact": 3641,
+            "snake_union": 587,
+            "snake_exact": 587,
+            "snake_both": 587,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14196,
+            "snake_union": 1611,
+            "snake_exact": 1299,
+            "snake_both": 1485,
+            "all_exact_rate": 0.9736625514403292,
+            "snake_exact_rate": 0.8063314711359404,
+            "snake_occupancy_iou": 0.9217877094972067
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2111,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 131,
+          "consistency": {
+            "cells": 2780,
+            "exact": 2684,
+            "snake_union": 464,
+            "snake_exact": 379,
+            "snake_both": 434,
+            "all_exact_rate": 0.9654676258992806,
+            "snake_exact_rate": 0.8168103448275862,
+            "snake_occupancy_iou": 0.9353448275862069
+          },
+          "truth_control": {
+            "cells": 2780,
+            "exact": 2780,
+            "snake_union": 436,
+            "snake_exact": 436,
+            "snake_both": 436,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14230,
+            "snake_union": 1558,
+            "snake_exact": 1283,
+            "snake_both": 1435,
+            "all_exact_rate": 0.97599451303155,
+            "snake_exact_rate": 0.8234916559691913,
+            "snake_occupancy_iou": 0.9210526315789473
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        }
+      ],
+      "elapsed_seconds": 66.9586191200001
+    },
+    {
+      "name": "ceiling24",
+      "checkpoint": "/home/avery/codes/qcwm/marlenv/marlenv/demodata/flex_nograd/model_step24000.pt",
+      "checkpoint_sha256": "08bf08cbea2d7798f13b2afebd25c219c5029f02f1e153b11344c39dfa58d33e",
+      "schedule": "FAGFAGAAGAAG",
+      "training_context": 80,
+      "training_window": 48,
+      "scores": {
+        "steps": 720,
+        "views": 2062,
+        "death_views": 4,
+        "overlapping_pairs": 1609,
+        "consistency": {
+          "cells": 38827,
+          "exact": 37997,
+          "snake_union": 5931,
+          "snake_exact": 5256,
+          "snake_both": 5716,
+          "all_exact_rate": 0.9786231230844515,
+          "snake_exact_rate": 0.8861911987860395,
+          "snake_occupancy_iou": 0.9637497892429607
+        },
+        "truth_control": {
+          "cells": 38827,
+          "exact": 38827,
+          "snake_union": 5837,
+          "snake_exact": 5837,
+          "snake_both": 5837,
+          "all_exact_rate": 1.0,
+          "snake_exact_rate": 1.0,
+          "snake_occupancy_iou": 1.0
+        },
+        "accuracy": {
+          "cells": 167022,
+          "exact": 165199,
+          "snake_union": 16518,
+          "snake_exact": 15474,
+          "snake_both": 16100,
+          "all_exact_rate": 0.9890852702039252,
+          "snake_exact_rate": 0.9367962223029422,
+          "snake_occupancy_iou": 0.9746942729143964
+        },
+        "death_accuracy": {
+          "cells": 324,
+          "exact": 297,
+          "snake_union": 31,
+          "snake_exact": 10,
+          "snake_both": 14,
+          "all_exact_rate": 0.9166666666666666,
+          "snake_exact_rate": 0.3225806451612903,
+          "snake_occupancy_iou": 0.45161290322580644
+        }
+      },
+      "episodes": [
+        {
+          "seed": 2100,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 153,
+          "consistency": {
+            "cells": 4356,
+            "exact": 4192,
+            "snake_union": 793,
+            "snake_exact": 661,
+            "snake_both": 748,
+            "all_exact_rate": 0.9623507805325987,
+            "snake_exact_rate": 0.8335435056746532,
+            "snake_occupancy_iou": 0.9432534678436317
+          },
+          "truth_control": {
+            "cells": 4356,
+            "exact": 4356,
+            "snake_union": 773,
+            "snake_exact": 773,
+            "snake_both": 773,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14372,
+            "snake_union": 1604,
+            "snake_exact": 1455,
+            "snake_both": 1549,
+            "all_exact_rate": 0.9857338820301783,
+            "snake_exact_rate": 0.9071072319201995,
+            "snake_occupancy_iou": 0.96571072319202
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2101,
+          "steps": 60,
+          "views": 157,
+          "death_views": 1,
+          "overlapping_pairs": 104,
+          "consistency": {
+            "cells": 2343,
+            "exact": 2305,
+            "snake_union": 267,
+            "snake_exact": 241,
+            "snake_both": 263,
+            "all_exact_rate": 0.9837814767392232,
+            "snake_exact_rate": 0.9026217228464419,
+            "snake_occupancy_iou": 0.9850187265917603
+          },
+          "truth_control": {
+            "cells": 2343,
+            "exact": 2343,
+            "snake_union": 270,
+            "snake_exact": 270,
+            "snake_both": 270,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 12717,
+            "exact": 12545,
+            "snake_union": 1206,
+            "snake_exact": 1137,
+            "snake_both": 1177,
+            "all_exact_rate": 0.9864747975151372,
+            "snake_exact_rate": 0.9427860696517413,
+            "snake_occupancy_iou": 0.9759535655058044
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 70,
+            "snake_union": 6,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": 0.8641975308641975,
+            "snake_exact_rate": 0.0,
+            "snake_occupancy_iou": 0.0
+          }
+        },
+        {
+          "seed": 2102,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 155,
+          "consistency": {
+            "cells": 3521,
+            "exact": 3440,
+            "snake_union": 462,
+            "snake_exact": 396,
+            "snake_both": 442,
+            "all_exact_rate": 0.9769951718261858,
+            "snake_exact_rate": 0.8571428571428571,
+            "snake_occupancy_iou": 0.9567099567099567
+          },
+          "truth_control": {
+            "cells": 3521,
+            "exact": 3521,
+            "snake_union": 457,
+            "snake_exact": 457,
+            "snake_both": 457,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14415,
+            "snake_union": 1344,
+            "snake_exact": 1242,
+            "snake_both": 1304,
+            "all_exact_rate": 0.9886831275720165,
+            "snake_exact_rate": 0.9241071428571429,
+            "snake_occupancy_iou": 0.9702380952380952
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2103,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 147,
+          "consistency": {
+            "cells": 3994,
+            "exact": 3909,
+            "snake_union": 838,
+            "snake_exact": 760,
+            "snake_both": 819,
+            "all_exact_rate": 0.9787180771156735,
+            "snake_exact_rate": 0.9069212410501193,
+            "snake_occupancy_iou": 0.977326968973747
+          },
+          "truth_control": {
+            "cells": 3994,
+            "exact": 3994,
+            "snake_union": 831,
+            "snake_exact": 831,
+            "snake_both": 831,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14384,
+            "snake_union": 1988,
+            "snake_exact": 1848,
+            "snake_both": 1940,
+            "all_exact_rate": 0.9865569272976681,
+            "snake_exact_rate": 0.9295774647887324,
+            "snake_occupancy_iou": 0.9758551307847082
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2104,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 133,
+          "consistency": {
+            "cells": 2990,
+            "exact": 2951,
+            "snake_union": 283,
+            "snake_exact": 254,
+            "snake_both": 278,
+            "all_exact_rate": 0.9869565217391304,
+            "snake_exact_rate": 0.8975265017667845,
+            "snake_occupancy_iou": 0.9823321554770318
+          },
+          "truth_control": {
+            "cells": 2990,
+            "exact": 2990,
+            "snake_union": 283,
+            "snake_exact": 283,
+            "snake_both": 283,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14485,
+            "snake_union": 1126,
+            "snake_exact": 1078,
+            "snake_both": 1109,
+            "all_exact_rate": 0.9934842249657064,
+            "snake_exact_rate": 0.9573712255772646,
+            "snake_occupancy_iou": 0.9849023090586145
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2105,
+          "steps": 60,
+          "views": 164,
+          "death_views": 1,
+          "overlapping_pairs": 125,
+          "consistency": {
+            "cells": 3193,
+            "exact": 3098,
+            "snake_union": 596,
+            "snake_exact": 519,
+            "snake_both": 572,
+            "all_exact_rate": 0.9702474162229878,
+            "snake_exact_rate": 0.8708053691275168,
+            "snake_occupancy_iou": 0.959731543624161
+          },
+          "truth_control": {
+            "cells": 3193,
+            "exact": 3193,
+            "snake_union": 575,
+            "snake_exact": 575,
+            "snake_both": 575,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 13284,
+            "exact": 13058,
+            "snake_union": 1378,
+            "snake_exact": 1253,
+            "snake_both": 1319,
+            "all_exact_rate": 0.9829870520927432,
+            "snake_exact_rate": 0.909288824383164,
+            "snake_occupancy_iou": 0.9571843251088534
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 74,
+            "snake_union": 15,
+            "snake_exact": 9,
+            "snake_both": 11,
+            "all_exact_rate": 0.9135802469135802,
+            "snake_exact_rate": 0.6,
+            "snake_occupancy_iou": 0.7333333333333333
+          }
+        },
+        {
+          "seed": 2106,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 144,
+          "consistency": {
+            "cells": 3246,
+            "exact": 3170,
+            "snake_union": 499,
+            "snake_exact": 433,
+            "snake_both": 477,
+            "all_exact_rate": 0.9765865680837954,
+            "snake_exact_rate": 0.8677354709418837,
+            "snake_occupancy_iou": 0.9559118236472945
+          },
+          "truth_control": {
+            "cells": 3246,
+            "exact": 3246,
+            "snake_union": 495,
+            "snake_exact": 495,
+            "snake_both": 495,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14458,
+            "snake_union": 1323,
+            "snake_exact": 1248,
+            "snake_both": 1291,
+            "all_exact_rate": 0.9916323731138545,
+            "snake_exact_rate": 0.9433106575963719,
+            "snake_occupancy_iou": 0.9758125472411187
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2107,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 168,
+          "consistency": {
+            "cells": 3506,
+            "exact": 3451,
+            "snake_union": 546,
+            "snake_exact": 503,
+            "snake_both": 528,
+            "all_exact_rate": 0.984312606959498,
+            "snake_exact_rate": 0.9212454212454212,
+            "snake_occupancy_iou": 0.967032967032967
+          },
+          "truth_control": {
+            "cells": 3506,
+            "exact": 3506,
+            "snake_union": 538,
+            "snake_exact": 538,
+            "snake_both": 538,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14442,
+            "snake_union": 1604,
+            "snake_exact": 1526,
+            "snake_both": 1576,
+            "all_exact_rate": 0.9905349794238684,
+            "snake_exact_rate": 0.9513715710723192,
+            "snake_occupancy_iou": 0.9825436408977556
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2108,
+          "steps": 60,
+          "views": 121,
+          "death_views": 1,
+          "overlapping_pairs": 38,
+          "consistency": {
+            "cells": 818,
+            "exact": 808,
+            "snake_union": 88,
+            "snake_exact": 79,
+            "snake_both": 83,
+            "all_exact_rate": 0.9877750611246944,
+            "snake_exact_rate": 0.8977272727272727,
+            "snake_occupancy_iou": 0.9431818181818182
+          },
+          "truth_control": {
+            "cells": 818,
+            "exact": 818,
+            "snake_union": 85,
+            "snake_exact": 85,
+            "snake_both": 85,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 9801,
+            "exact": 9727,
+            "snake_union": 721,
+            "snake_exact": 696,
+            "snake_both": 708,
+            "all_exact_rate": 0.9924497500255076,
+            "snake_exact_rate": 0.9653259361997226,
+            "snake_occupancy_iou": 0.9819694868238558
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 77,
+            "snake_union": 5,
+            "snake_exact": 1,
+            "snake_both": 3,
+            "all_exact_rate": 0.9506172839506173,
+            "snake_exact_rate": 0.2,
+            "snake_occupancy_iou": 0.6
+          }
+        },
+        {
+          "seed": 2109,
+          "steps": 60,
+          "views": 180,
+          "death_views": 1,
+          "overlapping_pairs": 159,
+          "consistency": {
+            "cells": 4439,
+            "exact": 4359,
+            "snake_union": 516,
+            "snake_exact": 450,
+            "snake_both": 497,
+            "all_exact_rate": 0.9819779229556206,
+            "snake_exact_rate": 0.872093023255814,
+            "snake_occupancy_iou": 0.9631782945736435
+          },
+          "truth_control": {
+            "cells": 4439,
+            "exact": 4439,
+            "snake_union": 507,
+            "snake_exact": 507,
+            "snake_both": 507,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14435,
+            "snake_union": 1209,
+            "snake_exact": 1123,
+            "snake_both": 1174,
+            "all_exact_rate": 0.9900548696844993,
+            "snake_exact_rate": 0.9288668320926385,
+            "snake_occupancy_iou": 0.9710504549214226
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 76,
+            "snake_union": 5,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": 0.9382716049382716,
+            "snake_exact_rate": 0.0,
+            "snake_occupancy_iou": 0.0
+          }
+        },
+        {
+          "seed": 2110,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 152,
+          "consistency": {
+            "cells": 3641,
+            "exact": 3579,
+            "snake_union": 599,
+            "snake_exact": 550,
+            "snake_both": 578,
+            "all_exact_rate": 0.9829717110683878,
+            "snake_exact_rate": 0.9181969949916527,
+            "snake_occupancy_iou": 0.9649415692821369
+          },
+          "truth_control": {
+            "cells": 3641,
+            "exact": 3641,
+            "snake_union": 587,
+            "snake_exact": 587,
+            "snake_both": 587,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14440,
+            "snake_union": 1530,
+            "snake_exact": 1454,
+            "snake_both": 1499,
+            "all_exact_rate": 0.99039780521262,
+            "snake_exact_rate": 0.9503267973856209,
+            "snake_occupancy_iou": 0.9797385620915032
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2111,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 131,
+          "consistency": {
+            "cells": 2780,
+            "exact": 2735,
+            "snake_union": 444,
+            "snake_exact": 410,
+            "snake_both": 431,
+            "all_exact_rate": 0.9838129496402878,
+            "snake_exact_rate": 0.9234234234234234,
+            "snake_occupancy_iou": 0.9707207207207207
+          },
+          "truth_control": {
+            "cells": 2780,
+            "exact": 2780,
+            "snake_union": 436,
+            "snake_exact": 436,
+            "snake_both": 436,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14438,
+            "snake_union": 1485,
+            "snake_exact": 1414,
+            "snake_both": 1454,
+            "all_exact_rate": 0.9902606310013717,
+            "snake_exact_rate": 0.9521885521885521,
+            "snake_occupancy_iou": 0.9791245791245792
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        }
+      ],
+      "elapsed_seconds": 66.69891476500015
+    },
+    {
+      "name": "solo40",
+      "checkpoint": "/home/avery/codes/qcwm/marlenv/marlenv/demodata/flex_solo_deaths/model_step16000.pt",
+      "checkpoint_sha256": "d21f49884e219e302095c8611b1d8530cb8c8e3fe7d1292108a0a89266f0520c",
+      "schedule": "FAGFAGAAGAAG",
+      "training_context": 80,
+      "training_window": 48,
+      "scores": {
+        "steps": 720,
+        "views": 2062,
+        "death_views": 4,
+        "overlapping_pairs": 1609,
+        "consistency": {
+          "cells": 38827,
+          "exact": 33611,
+          "snake_union": 7252,
+          "snake_exact": 2351,
+          "snake_both": 3719,
+          "all_exact_rate": 0.8656604939861436,
+          "snake_exact_rate": 0.3241864313292885,
+          "snake_occupancy_iou": 0.5128240485383343
+        },
+        "truth_control": {
+          "cells": 38827,
+          "exact": 38827,
+          "snake_union": 5837,
+          "snake_exact": 5837,
+          "snake_both": 5837,
+          "all_exact_rate": 1.0,
+          "snake_exact_rate": 1.0,
+          "snake_occupancy_iou": 1.0
+        },
+        "accuracy": {
+          "cells": 167022,
+          "exact": 158645,
+          "snake_union": 18945,
+          "snake_exact": 11477,
+          "snake_both": 13855,
+          "all_exact_rate": 0.9498449306079438,
+          "snake_exact_rate": 0.6058062813407231,
+          "snake_occupancy_iou": 0.7313275270519927
+        },
+        "death_accuracy": {
+          "cells": 324,
+          "exact": 300,
+          "snake_union": 31,
+          "snake_exact": 10,
+          "snake_both": 17,
+          "all_exact_rate": 0.9259259259259259,
+          "snake_exact_rate": 0.3225806451612903,
+          "snake_occupancy_iou": 0.5483870967741935
+        }
+      },
+      "episodes": [
+        {
+          "seed": 2100,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 153,
+          "consistency": {
+            "cells": 4356,
+            "exact": 3648,
+            "snake_union": 934,
+            "snake_exact": 265,
+            "snake_both": 453,
+            "all_exact_rate": 0.837465564738292,
+            "snake_exact_rate": 0.2837259100642398,
+            "snake_occupancy_iou": 0.48501070663811563
+          },
+          "truth_control": {
+            "cells": 4356,
+            "exact": 4356,
+            "snake_union": 773,
+            "snake_exact": 773,
+            "snake_both": 773,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13685,
+            "snake_union": 1825,
+            "snake_exact": 1005,
+            "snake_both": 1279,
+            "all_exact_rate": 0.9386145404663924,
+            "snake_exact_rate": 0.5506849315068493,
+            "snake_occupancy_iou": 0.7008219178082192
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2101,
+          "steps": 60,
+          "views": 157,
+          "death_views": 1,
+          "overlapping_pairs": 104,
+          "consistency": {
+            "cells": 2343,
+            "exact": 2057,
+            "snake_union": 368,
+            "snake_exact": 103,
+            "snake_both": 180,
+            "all_exact_rate": 0.8779342723004695,
+            "snake_exact_rate": 0.2798913043478261,
+            "snake_occupancy_iou": 0.4891304347826087
+          },
+          "truth_control": {
+            "cells": 2343,
+            "exact": 2343,
+            "snake_union": 270,
+            "snake_exact": 270,
+            "snake_both": 270,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 12717,
+            "exact": 12171,
+            "snake_union": 1381,
+            "snake_exact": 928,
+            "snake_both": 1058,
+            "all_exact_rate": 0.9570653456003775,
+            "snake_exact_rate": 0.6719768283852281,
+            "snake_occupancy_iou": 0.7661115133960897
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 76,
+            "snake_union": 8,
+            "snake_exact": 4,
+            "snake_both": 6,
+            "all_exact_rate": 0.9382716049382716,
+            "snake_exact_rate": 0.5,
+            "snake_occupancy_iou": 0.75
+          }
+        },
+        {
+          "seed": 2102,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 155,
+          "consistency": {
+            "cells": 3521,
+            "exact": 3082,
+            "snake_union": 606,
+            "snake_exact": 207,
+            "snake_both": 300,
+            "all_exact_rate": 0.875319511502414,
+            "snake_exact_rate": 0.3415841584158416,
+            "snake_occupancy_iou": 0.49504950495049505
+          },
+          "truth_control": {
+            "cells": 3521,
+            "exact": 3521,
+            "snake_union": 457,
+            "snake_exact": 457,
+            "snake_both": 457,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13847,
+            "snake_union": 1571,
+            "snake_exact": 915,
+            "snake_both": 1131,
+            "all_exact_rate": 0.9497256515775034,
+            "snake_exact_rate": 0.5824315722469765,
+            "snake_occupancy_iou": 0.7199236155315086
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2103,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 147,
+          "consistency": {
+            "cells": 3994,
+            "exact": 3358,
+            "snake_union": 961,
+            "snake_exact": 347,
+            "snake_both": 557,
+            "all_exact_rate": 0.8407611417125689,
+            "snake_exact_rate": 0.3610822060353798,
+            "snake_occupancy_iou": 0.5796045785639958
+          },
+          "truth_control": {
+            "cells": 3994,
+            "exact": 3994,
+            "snake_union": 831,
+            "snake_exact": 831,
+            "snake_both": 831,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13653,
+            "snake_union": 2213,
+            "snake_exact": 1359,
+            "snake_both": 1658,
+            "all_exact_rate": 0.9364197530864198,
+            "snake_exact_rate": 0.614098508811568,
+            "snake_occupancy_iou": 0.7492092182557614
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2104,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 133,
+          "consistency": {
+            "cells": 2990,
+            "exact": 2701,
+            "snake_union": 371,
+            "snake_exact": 104,
+            "snake_both": 163,
+            "all_exact_rate": 0.9033444816053512,
+            "snake_exact_rate": 0.2803234501347709,
+            "snake_occupancy_iou": 0.4393530997304582
+          },
+          "truth_control": {
+            "cells": 2990,
+            "exact": 2990,
+            "snake_union": 283,
+            "snake_exact": 283,
+            "snake_both": 283,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14000,
+            "snake_union": 1316,
+            "snake_exact": 808,
+            "snake_both": 962,
+            "all_exact_rate": 0.9602194787379973,
+            "snake_exact_rate": 0.6139817629179332,
+            "snake_occupancy_iou": 0.7310030395136778
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2105,
+          "steps": 60,
+          "views": 164,
+          "death_views": 1,
+          "overlapping_pairs": 125,
+          "consistency": {
+            "cells": 3193,
+            "exact": 2705,
+            "snake_union": 711,
+            "snake_exact": 249,
+            "snake_both": 386,
+            "all_exact_rate": 0.8471656749138741,
+            "snake_exact_rate": 0.350210970464135,
+            "snake_occupancy_iou": 0.5428973277074542
+          },
+          "truth_control": {
+            "cells": 3193,
+            "exact": 3193,
+            "snake_union": 575,
+            "snake_exact": 575,
+            "snake_both": 575,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 13284,
+            "exact": 12575,
+            "snake_union": 1584,
+            "snake_exact": 955,
+            "snake_both": 1143,
+            "all_exact_rate": 0.9466275218307738,
+            "snake_exact_rate": 0.6029040404040404,
+            "snake_occupancy_iou": 0.7215909090909091
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 71,
+            "snake_union": 15,
+            "snake_exact": 5,
+            "snake_both": 8,
+            "all_exact_rate": 0.8765432098765432,
+            "snake_exact_rate": 0.3333333333333333,
+            "snake_occupancy_iou": 0.5333333333333333
+          }
+        },
+        {
+          "seed": 2106,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 144,
+          "consistency": {
+            "cells": 3246,
+            "exact": 2802,
+            "snake_union": 615,
+            "snake_exact": 197,
+            "snake_both": 320,
+            "all_exact_rate": 0.8632162661737524,
+            "snake_exact_rate": 0.3203252032520325,
+            "snake_occupancy_iou": 0.5203252032520326
+          },
+          "truth_control": {
+            "cells": 3246,
+            "exact": 3246,
+            "snake_union": 495,
+            "snake_exact": 495,
+            "snake_both": 495,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13869,
+            "snake_union": 1567,
+            "snake_exact": 934,
+            "snake_both": 1118,
+            "all_exact_rate": 0.9512345679012346,
+            "snake_exact_rate": 0.5960433950223357,
+            "snake_occupancy_iou": 0.7134652201659222
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2107,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 168,
+          "consistency": {
+            "cells": 3506,
+            "exact": 3058,
+            "snake_union": 648,
+            "snake_exact": 233,
+            "snake_both": 325,
+            "all_exact_rate": 0.872219053051911,
+            "snake_exact_rate": 0.3595679012345679,
+            "snake_occupancy_iou": 0.5015432098765432
+          },
+          "truth_control": {
+            "cells": 3506,
+            "exact": 3506,
+            "snake_union": 538,
+            "snake_exact": 538,
+            "snake_both": 538,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13797,
+            "snake_union": 1816,
+            "snake_exact": 1122,
+            "snake_both": 1318,
+            "all_exact_rate": 0.9462962962962963,
+            "snake_exact_rate": 0.6178414096916299,
+            "snake_occupancy_iou": 0.7257709251101322
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2108,
+          "steps": 60,
+          "views": 121,
+          "death_views": 1,
+          "overlapping_pairs": 38,
+          "consistency": {
+            "cells": 818,
+            "exact": 728,
+            "snake_union": 111,
+            "snake_exact": 29,
+            "snake_both": 55,
+            "all_exact_rate": 0.8899755501222494,
+            "snake_exact_rate": 0.26126126126126126,
+            "snake_occupancy_iou": 0.4954954954954955
+          },
+          "truth_control": {
+            "cells": 818,
+            "exact": 818,
+            "snake_union": 85,
+            "snake_exact": 85,
+            "snake_both": 85,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 9801,
+            "exact": 9548,
+            "snake_union": 797,
+            "snake_exact": 590,
+            "snake_both": 651,
+            "all_exact_rate": 0.9741863075196409,
+            "snake_exact_rate": 0.740276035131744,
+            "snake_occupancy_iou": 0.8168130489335006
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 76,
+            "snake_union": 5,
+            "snake_exact": 1,
+            "snake_both": 3,
+            "all_exact_rate": 0.9382716049382716,
+            "snake_exact_rate": 0.2,
+            "snake_occupancy_iou": 0.6
+          }
+        },
+        {
+          "seed": 2109,
+          "steps": 60,
+          "views": 180,
+          "death_views": 1,
+          "overlapping_pairs": 159,
+          "consistency": {
+            "cells": 4439,
+            "exact": 3899,
+            "snake_union": 652,
+            "snake_exact": 138,
+            "snake_both": 269,
+            "all_exact_rate": 0.8783509799504393,
+            "snake_exact_rate": 0.2116564417177914,
+            "snake_occupancy_iou": 0.4125766871165644
+          },
+          "truth_control": {
+            "cells": 4439,
+            "exact": 4439,
+            "snake_union": 507,
+            "snake_exact": 507,
+            "snake_both": 507,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13794,
+            "snake_union": 1451,
+            "snake_exact": 718,
+            "snake_both": 953,
+            "all_exact_rate": 0.9460905349794239,
+            "snake_exact_rate": 0.4948311509303928,
+            "snake_occupancy_iou": 0.656788421778084
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 77,
+            "snake_union": 3,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": 0.9506172839506173,
+            "snake_exact_rate": 0.0,
+            "snake_occupancy_iou": 0.0
+          }
+        },
+        {
+          "seed": 2110,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 152,
+          "consistency": {
+            "cells": 3641,
+            "exact": 3137,
+            "snake_union": 754,
+            "snake_exact": 278,
+            "snake_both": 409,
+            "all_exact_rate": 0.8615764899752815,
+            "snake_exact_rate": 0.3687002652519894,
+            "snake_occupancy_iou": 0.5424403183023873
+          },
+          "truth_control": {
+            "cells": 3641,
+            "exact": 3641,
+            "snake_union": 587,
+            "snake_exact": 587,
+            "snake_both": 587,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13810,
+            "snake_union": 1770,
+            "snake_exact": 1074,
+            "snake_both": 1314,
+            "all_exact_rate": 0.9471879286694102,
+            "snake_exact_rate": 0.6067796610169491,
+            "snake_occupancy_iou": 0.7423728813559322
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2111,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 131,
+          "consistency": {
+            "cells": 2780,
+            "exact": 2436,
+            "snake_union": 521,
+            "snake_exact": 201,
+            "snake_both": 302,
+            "all_exact_rate": 0.8762589928057554,
+            "snake_exact_rate": 0.3857965451055662,
+            "snake_occupancy_iou": 0.5796545105566219
+          },
+          "truth_control": {
+            "cells": 2780,
+            "exact": 2780,
+            "snake_union": 436,
+            "snake_exact": 436,
+            "snake_both": 436,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 13896,
+            "snake_union": 1654,
+            "snake_exact": 1069,
+            "snake_both": 1270,
+            "all_exact_rate": 0.9530864197530864,
+            "snake_exact_rate": 0.6463119709794438,
+            "snake_occupancy_iou": 0.7678355501813785
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        }
+      ],
+      "elapsed_seconds": 66.07307195700014
+    },
+    {
+      "name": "ego40",
+      "checkpoint": "/home/avery/codes/qcwm/marlenv/marlenv/demodata/flex_ego_deaths/model_step16000.pt",
+      "checkpoint_sha256": "a721818ba48b65793c2357dbc5485244c3f687203a10400027a60da9cc4007e8",
+      "schedule": "FAGFAGAAGAAG",
+      "training_context": 80,
+      "training_window": 48,
+      "scores": {
+        "steps": 720,
+        "views": 2062,
+        "death_views": 4,
+        "overlapping_pairs": 1609,
+        "consistency": {
+          "cells": 38827,
+          "exact": 37195,
+          "snake_union": 6325,
+          "snake_exact": 4794,
+          "snake_both": 5700,
+          "all_exact_rate": 0.9579673938238854,
+          "snake_exact_rate": 0.7579446640316205,
+          "snake_occupancy_iou": 0.9011857707509882
+        },
+        "truth_control": {
+          "cells": 38827,
+          "exact": 38827,
+          "snake_union": 5837,
+          "snake_exact": 5837,
+          "snake_both": 5837,
+          "all_exact_rate": 1.0,
+          "snake_exact_rate": 1.0,
+          "snake_occupancy_iou": 1.0
+        },
+        "accuracy": {
+          "cells": 167022,
+          "exact": 163294,
+          "snake_union": 17261,
+          "snake_exact": 14185,
+          "snake_both": 15940,
+          "all_exact_rate": 0.9776795871202596,
+          "snake_exact_rate": 0.8217947975204217,
+          "snake_occupancy_iou": 0.923469092173107
+        },
+        "death_accuracy": {
+          "cells": 324,
+          "exact": 305,
+          "snake_union": 30,
+          "snake_exact": 14,
+          "snake_both": 18,
+          "all_exact_rate": 0.941358024691358,
+          "snake_exact_rate": 0.4666666666666667,
+          "snake_occupancy_iou": 0.6
+        }
+      },
+      "episodes": [
+        {
+          "seed": 2100,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 153,
+          "consistency": {
+            "cells": 4356,
+            "exact": 4101,
+            "snake_union": 836,
+            "snake_exact": 597,
+            "snake_both": 762,
+            "all_exact_rate": 0.9414600550964187,
+            "snake_exact_rate": 0.7141148325358851,
+            "snake_occupancy_iou": 0.9114832535885168
+          },
+          "truth_control": {
+            "cells": 4356,
+            "exact": 4356,
+            "snake_union": 773,
+            "snake_exact": 773,
+            "snake_both": 773,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14209,
+            "snake_union": 1661,
+            "snake_exact": 1346,
+            "snake_both": 1545,
+            "all_exact_rate": 0.974554183813443,
+            "snake_exact_rate": 0.8103552077062011,
+            "snake_occupancy_iou": 0.930162552679109
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2101,
+          "steps": 60,
+          "views": 157,
+          "death_views": 1,
+          "overlapping_pairs": 104,
+          "consistency": {
+            "cells": 2343,
+            "exact": 2264,
+            "snake_union": 283,
+            "snake_exact": 215,
+            "snake_both": 256,
+            "all_exact_rate": 0.9662825437473325,
+            "snake_exact_rate": 0.7597173144876325,
+            "snake_occupancy_iou": 0.9045936395759717
+          },
+          "truth_control": {
+            "cells": 2343,
+            "exact": 2343,
+            "snake_union": 270,
+            "snake_exact": 270,
+            "snake_both": 270,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 12717,
+            "exact": 12494,
+            "snake_union": 1236,
+            "snake_exact": 1093,
+            "snake_both": 1174,
+            "all_exact_rate": 0.9824644177085791,
+            "snake_exact_rate": 0.8843042071197411,
+            "snake_occupancy_iou": 0.9498381877022654
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 78,
+            "snake_union": 7,
+            "snake_exact": 5,
+            "snake_both": 6,
+            "all_exact_rate": 0.9629629629629629,
+            "snake_exact_rate": 0.7142857142857143,
+            "snake_occupancy_iou": 0.8571428571428571
+          }
+        },
+        {
+          "seed": 2102,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 155,
+          "consistency": {
+            "cells": 3521,
+            "exact": 3345,
+            "snake_union": 522,
+            "snake_exact": 362,
+            "snake_both": 446,
+            "all_exact_rate": 0.9500142005112184,
+            "snake_exact_rate": 0.6934865900383141,
+            "snake_occupancy_iou": 0.8544061302681992
+          },
+          "truth_control": {
+            "cells": 3521,
+            "exact": 3521,
+            "snake_union": 457,
+            "snake_exact": 457,
+            "snake_both": 457,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14200,
+            "snake_union": 1434,
+            "snake_exact": 1103,
+            "snake_both": 1289,
+            "all_exact_rate": 0.9739368998628258,
+            "snake_exact_rate": 0.7691771269177127,
+            "snake_occupancy_iou": 0.898884239888424
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2103,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 147,
+          "consistency": {
+            "cells": 3994,
+            "exact": 3817,
+            "snake_union": 872,
+            "snake_exact": 703,
+            "snake_both": 804,
+            "all_exact_rate": 0.9556835252879319,
+            "snake_exact_rate": 0.8061926605504587,
+            "snake_occupancy_iou": 0.9220183486238532
+          },
+          "truth_control": {
+            "cells": 3994,
+            "exact": 3994,
+            "snake_union": 831,
+            "snake_exact": 831,
+            "snake_both": 831,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14175,
+            "snake_union": 2058,
+            "snake_exact": 1708,
+            "snake_both": 1908,
+            "all_exact_rate": 0.9722222222222222,
+            "snake_exact_rate": 0.8299319727891157,
+            "snake_occupancy_iou": 0.9271137026239067
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2104,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 133,
+          "consistency": {
+            "cells": 2990,
+            "exact": 2907,
+            "snake_union": 304,
+            "snake_exact": 228,
+            "snake_both": 267,
+            "all_exact_rate": 0.9722408026755853,
+            "snake_exact_rate": 0.75,
+            "snake_occupancy_iou": 0.8782894736842105
+          },
+          "truth_control": {
+            "cells": 2990,
+            "exact": 2990,
+            "snake_union": 283,
+            "snake_exact": 283,
+            "snake_both": 283,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14355,
+            "snake_union": 1177,
+            "snake_exact": 996,
+            "snake_both": 1096,
+            "all_exact_rate": 0.9845679012345679,
+            "snake_exact_rate": 0.8462192013593883,
+            "snake_occupancy_iou": 0.9311809685641461
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2105,
+          "steps": 60,
+          "views": 164,
+          "death_views": 1,
+          "overlapping_pairs": 125,
+          "consistency": {
+            "cells": 3193,
+            "exact": 3023,
+            "snake_union": 629,
+            "snake_exact": 464,
+            "snake_both": 560,
+            "all_exact_rate": 0.9467585342937677,
+            "snake_exact_rate": 0.7376788553259142,
+            "snake_occupancy_iou": 0.890302066772655
+          },
+          "truth_control": {
+            "cells": 3193,
+            "exact": 3193,
+            "snake_union": 575,
+            "snake_exact": 575,
+            "snake_both": 575,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 13284,
+            "exact": 12933,
+            "snake_union": 1449,
+            "snake_exact": 1164,
+            "snake_both": 1309,
+            "all_exact_rate": 0.9735772357723578,
+            "snake_exact_rate": 0.8033126293995859,
+            "snake_occupancy_iou": 0.9033816425120773
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 73,
+            "snake_union": 15,
+            "snake_exact": 7,
+            "snake_both": 9,
+            "all_exact_rate": 0.9012345679012346,
+            "snake_exact_rate": 0.4666666666666667,
+            "snake_occupancy_iou": 0.6
+          }
+        },
+        {
+          "seed": 2106,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 144,
+          "consistency": {
+            "cells": 3246,
+            "exact": 3113,
+            "snake_union": 537,
+            "snake_exact": 413,
+            "snake_both": 485,
+            "all_exact_rate": 0.959026494146642,
+            "snake_exact_rate": 0.7690875232774674,
+            "snake_occupancy_iou": 0.9031657355679702
+          },
+          "truth_control": {
+            "cells": 3246,
+            "exact": 3246,
+            "snake_union": 495,
+            "snake_exact": 495,
+            "snake_both": 495,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14270,
+            "snake_union": 1388,
+            "snake_exact": 1124,
+            "snake_both": 1287,
+            "all_exact_rate": 0.9787379972565158,
+            "snake_exact_rate": 0.8097982708933718,
+            "snake_occupancy_iou": 0.9272334293948127
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2107,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 168,
+          "consistency": {
+            "cells": 3506,
+            "exact": 3375,
+            "snake_union": 575,
+            "snake_exact": 449,
+            "snake_both": 519,
+            "all_exact_rate": 0.9626354820308043,
+            "snake_exact_rate": 0.7808695652173913,
+            "snake_occupancy_iou": 0.9026086956521739
+          },
+          "truth_control": {
+            "cells": 3506,
+            "exact": 3506,
+            "snake_union": 538,
+            "snake_exact": 538,
+            "snake_both": 538,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14279,
+            "snake_union": 1670,
+            "snake_exact": 1426,
+            "snake_both": 1561,
+            "all_exact_rate": 0.9793552812071331,
+            "snake_exact_rate": 0.8538922155688623,
+            "snake_occupancy_iou": 0.9347305389221557
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2108,
+          "steps": 60,
+          "views": 121,
+          "death_views": 1,
+          "overlapping_pairs": 38,
+          "consistency": {
+            "cells": 818,
+            "exact": 798,
+            "snake_union": 89,
+            "snake_exact": 72,
+            "snake_both": 80,
+            "all_exact_rate": 0.9755501222493888,
+            "snake_exact_rate": 0.8089887640449438,
+            "snake_occupancy_iou": 0.898876404494382
+          },
+          "truth_control": {
+            "cells": 818,
+            "exact": 818,
+            "snake_union": 85,
+            "snake_exact": 85,
+            "snake_both": 85,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 9801,
+            "exact": 9683,
+            "snake_union": 737,
+            "snake_exact": 659,
+            "snake_both": 695,
+            "all_exact_rate": 0.9879604122028365,
+            "snake_exact_rate": 0.8941655359565808,
+            "snake_occupancy_iou": 0.9430122116689281
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 77,
+            "snake_union": 5,
+            "snake_exact": 2,
+            "snake_both": 3,
+            "all_exact_rate": 0.9506172839506173,
+            "snake_exact_rate": 0.4,
+            "snake_occupancy_iou": 0.6
+          }
+        },
+        {
+          "seed": 2109,
+          "steps": 60,
+          "views": 180,
+          "death_views": 1,
+          "overlapping_pairs": 159,
+          "consistency": {
+            "cells": 4439,
+            "exact": 4270,
+            "snake_union": 571,
+            "snake_exact": 413,
+            "snake_both": 512,
+            "all_exact_rate": 0.9619283622437486,
+            "snake_exact_rate": 0.723292469352014,
+            "snake_occupancy_iou": 0.8966725043782837
+          },
+          "truth_control": {
+            "cells": 4439,
+            "exact": 4439,
+            "snake_union": 507,
+            "snake_exact": 507,
+            "snake_both": 507,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14205,
+            "snake_union": 1300,
+            "snake_exact": 958,
+            "snake_both": 1161,
+            "all_exact_rate": 0.9742798353909465,
+            "snake_exact_rate": 0.7369230769230769,
+            "snake_occupancy_iou": 0.8930769230769231
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 77,
+            "snake_union": 3,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": 0.9506172839506173,
+            "snake_exact_rate": 0.0,
+            "snake_occupancy_iou": 0.0
+          }
+        },
+        {
+          "seed": 2110,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 152,
+          "consistency": {
+            "cells": 3641,
+            "exact": 3497,
+            "snake_union": 649,
+            "snake_exact": 507,
+            "snake_both": 585,
+            "all_exact_rate": 0.9604504257072233,
+            "snake_exact_rate": 0.7812018489984591,
+            "snake_occupancy_iou": 0.901386748844376
+          },
+          "truth_control": {
+            "cells": 3641,
+            "exact": 3641,
+            "snake_union": 587,
+            "snake_exact": 587,
+            "snake_both": 587,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14212,
+            "snake_union": 1610,
+            "snake_exact": 1301,
+            "snake_both": 1481,
+            "all_exact_rate": 0.9747599451303155,
+            "snake_exact_rate": 0.8080745341614907,
+            "snake_occupancy_iou": 0.9198757763975155
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2111,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 131,
+          "consistency": {
+            "cells": 2780,
+            "exact": 2685,
+            "snake_union": 458,
+            "snake_exact": 371,
+            "snake_both": 424,
+            "all_exact_rate": 0.9658273381294964,
+            "snake_exact_rate": 0.8100436681222707,
+            "snake_occupancy_iou": 0.925764192139738
+          },
+          "truth_control": {
+            "cells": 2780,
+            "exact": 2780,
+            "snake_union": 436,
+            "snake_exact": 436,
+            "snake_both": 436,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14279,
+            "snake_union": 1541,
+            "snake_exact": 1307,
+            "snake_both": 1434,
+            "all_exact_rate": 0.9793552812071331,
+            "snake_exact_rate": 0.8481505515898767,
+            "snake_occupancy_iou": 0.9305645684620376
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        }
+      ],
+      "elapsed_seconds": 65.78876414600018
+    },
+    {
+      "name": "ceiling40",
+      "checkpoint": "/home/avery/codes/qcwm/marlenv/marlenv/demodata/flex_nograd_warm/model_step16000.pt",
+      "checkpoint_sha256": "64405bde3b7415215a078e217aa5c210b47439126f6cae5d5da7dfcd492a4cf6",
+      "schedule": "FAGFAGAAGAAG",
+      "training_context": 80,
+      "training_window": 48,
+      "scores": {
+        "steps": 720,
+        "views": 2062,
+        "death_views": 4,
+        "overlapping_pairs": 1609,
+        "consistency": {
+          "cells": 38827,
+          "exact": 38104,
+          "snake_union": 5904,
+          "snake_exact": 5261,
+          "snake_both": 5694,
+          "all_exact_rate": 0.9813789373374199,
+          "snake_exact_rate": 0.8910907859078591,
+          "snake_occupancy_iou": 0.9644308943089431
+        },
+        "truth_control": {
+          "cells": 38827,
+          "exact": 38827,
+          "snake_union": 5837,
+          "snake_exact": 5837,
+          "snake_both": 5837,
+          "all_exact_rate": 1.0,
+          "snake_exact_rate": 1.0,
+          "snake_occupancy_iou": 1.0
+        },
+        "accuracy": {
+          "cells": 167022,
+          "exact": 165453,
+          "snake_union": 16490,
+          "snake_exact": 15548,
+          "snake_both": 16127,
+          "all_exact_rate": 0.990606027948414,
+          "snake_exact_rate": 0.942874469375379,
+          "snake_occupancy_iou": 0.9779866585809581
+        },
+        "death_accuracy": {
+          "cells": 324,
+          "exact": 317,
+          "snake_union": 22,
+          "snake_exact": 17,
+          "snake_both": 19,
+          "all_exact_rate": 0.9783950617283951,
+          "snake_exact_rate": 0.7727272727272727,
+          "snake_occupancy_iou": 0.8636363636363636
+        }
+      },
+      "episodes": [
+        {
+          "seed": 2100,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 153,
+          "consistency": {
+            "cells": 4356,
+            "exact": 4209,
+            "snake_union": 799,
+            "snake_exact": 659,
+            "snake_both": 761,
+            "all_exact_rate": 0.9662534435261708,
+            "snake_exact_rate": 0.8247809762202754,
+            "snake_occupancy_iou": 0.9524405506883604
+          },
+          "truth_control": {
+            "cells": 4356,
+            "exact": 4356,
+            "snake_union": 773,
+            "snake_exact": 773,
+            "snake_both": 773,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14408,
+            "snake_union": 1605,
+            "snake_exact": 1467,
+            "snake_both": 1563,
+            "all_exact_rate": 0.9882030178326474,
+            "snake_exact_rate": 0.914018691588785,
+            "snake_occupancy_iou": 0.9738317757009346
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2101,
+          "steps": 60,
+          "views": 157,
+          "death_views": 1,
+          "overlapping_pairs": 104,
+          "consistency": {
+            "cells": 2343,
+            "exact": 2315,
+            "snake_union": 272,
+            "snake_exact": 248,
+            "snake_both": 267,
+            "all_exact_rate": 0.9880495091762698,
+            "snake_exact_rate": 0.9117647058823529,
+            "snake_occupancy_iou": 0.9816176470588235
+          },
+          "truth_control": {
+            "cells": 2343,
+            "exact": 2343,
+            "snake_union": 270,
+            "snake_exact": 270,
+            "snake_both": 270,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 12717,
+            "exact": 12587,
+            "snake_union": 1207,
+            "snake_exact": 1155,
+            "snake_both": 1191,
+            "all_exact_rate": 0.989777463238185,
+            "snake_exact_rate": 0.9569179784589892,
+            "snake_occupancy_iou": 0.9867439933719967
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 79,
+            "snake_union": 6,
+            "snake_exact": 5,
+            "snake_both": 5,
+            "all_exact_rate": 0.9753086419753086,
+            "snake_exact_rate": 0.8333333333333334,
+            "snake_occupancy_iou": 0.8333333333333334
+          }
+        },
+        {
+          "seed": 2102,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 155,
+          "consistency": {
+            "cells": 3521,
+            "exact": 3453,
+            "snake_union": 462,
+            "snake_exact": 404,
+            "snake_both": 441,
+            "all_exact_rate": 0.9806873047429707,
+            "snake_exact_rate": 0.8744588744588745,
+            "snake_occupancy_iou": 0.9545454545454546
+          },
+          "truth_control": {
+            "cells": 3521,
+            "exact": 3521,
+            "snake_union": 457,
+            "snake_exact": 457,
+            "snake_both": 457,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14435,
+            "snake_union": 1343,
+            "snake_exact": 1257,
+            "snake_both": 1305,
+            "all_exact_rate": 0.9900548696844993,
+            "snake_exact_rate": 0.93596425912137,
+            "snake_occupancy_iou": 0.9717051377513031
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2103,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 147,
+          "consistency": {
+            "cells": 3994,
+            "exact": 3909,
+            "snake_union": 831,
+            "snake_exact": 751,
+            "snake_both": 807,
+            "all_exact_rate": 0.9787180771156735,
+            "snake_exact_rate": 0.9037304452466908,
+            "snake_occupancy_iou": 0.9711191335740073
+          },
+          "truth_control": {
+            "cells": 3994,
+            "exact": 3994,
+            "snake_union": 831,
+            "snake_exact": 831,
+            "snake_both": 831,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14371,
+            "snake_union": 1988,
+            "snake_exact": 1835,
+            "snake_both": 1928,
+            "all_exact_rate": 0.9856652949245542,
+            "snake_exact_rate": 0.9230382293762576,
+            "snake_occupancy_iou": 0.9698189134808853
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2104,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 133,
+          "consistency": {
+            "cells": 2990,
+            "exact": 2957,
+            "snake_union": 283,
+            "snake_exact": 259,
+            "snake_both": 278,
+            "all_exact_rate": 0.9889632107023412,
+            "snake_exact_rate": 0.9151943462897526,
+            "snake_occupancy_iou": 0.9823321554770318
+          },
+          "truth_control": {
+            "cells": 2990,
+            "exact": 2990,
+            "snake_union": 283,
+            "snake_exact": 283,
+            "snake_both": 283,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14505,
+            "snake_union": 1125,
+            "snake_exact": 1089,
+            "snake_both": 1112,
+            "all_exact_rate": 0.9948559670781894,
+            "snake_exact_rate": 0.968,
+            "snake_occupancy_iou": 0.9884444444444445
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2105,
+          "steps": 60,
+          "views": 164,
+          "death_views": 1,
+          "overlapping_pairs": 125,
+          "consistency": {
+            "cells": 3193,
+            "exact": 3097,
+            "snake_union": 579,
+            "snake_exact": 496,
+            "snake_both": 550,
+            "all_exact_rate": 0.9699342311305982,
+            "snake_exact_rate": 0.8566493955094991,
+            "snake_occupancy_iou": 0.9499136442141624
+          },
+          "truth_control": {
+            "cells": 3193,
+            "exact": 3193,
+            "snake_union": 575,
+            "snake_exact": 575,
+            "snake_both": 575,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 13284,
+            "exact": 13104,
+            "snake_union": 1361,
+            "snake_exact": 1256,
+            "snake_both": 1321,
+            "all_exact_rate": 0.986449864498645,
+            "snake_exact_rate": 0.922850844966936,
+            "snake_occupancy_iou": 0.97060984570169
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 79,
+            "snake_union": 11,
+            "snake_exact": 10,
+            "snake_both": 11,
+            "all_exact_rate": 0.9753086419753086,
+            "snake_exact_rate": 0.9090909090909091,
+            "snake_occupancy_iou": 1.0
+          }
+        },
+        {
+          "seed": 2106,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 144,
+          "consistency": {
+            "cells": 3246,
+            "exact": 3187,
+            "snake_union": 488,
+            "snake_exact": 437,
+            "snake_both": 468,
+            "all_exact_rate": 0.9818237831176833,
+            "snake_exact_rate": 0.8954918032786885,
+            "snake_occupancy_iou": 0.9590163934426229
+          },
+          "truth_control": {
+            "cells": 3246,
+            "exact": 3246,
+            "snake_union": 495,
+            "snake_exact": 495,
+            "snake_both": 495,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14469,
+            "snake_union": 1320,
+            "snake_exact": 1248,
+            "snake_both": 1282,
+            "all_exact_rate": 0.9923868312757201,
+            "snake_exact_rate": 0.9454545454545454,
+            "snake_occupancy_iou": 0.9712121212121212
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2107,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 168,
+          "consistency": {
+            "cells": 3506,
+            "exact": 3472,
+            "snake_union": 542,
+            "snake_exact": 514,
+            "snake_both": 532,
+            "all_exact_rate": 0.9903023388476897,
+            "snake_exact_rate": 0.948339483394834,
+            "snake_occupancy_iou": 0.981549815498155
+          },
+          "truth_control": {
+            "cells": 3506,
+            "exact": 3506,
+            "snake_union": 538,
+            "snake_exact": 538,
+            "snake_both": 538,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14479,
+            "snake_union": 1602,
+            "snake_exact": 1546,
+            "snake_both": 1583,
+            "all_exact_rate": 0.9930727023319615,
+            "snake_exact_rate": 0.9650436953807741,
+            "snake_occupancy_iou": 0.9881398252184769
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2108,
+          "steps": 60,
+          "views": 121,
+          "death_views": 1,
+          "overlapping_pairs": 38,
+          "consistency": {
+            "cells": 818,
+            "exact": 810,
+            "snake_union": 87,
+            "snake_exact": 79,
+            "snake_both": 84,
+            "all_exact_rate": 0.9902200488997555,
+            "snake_exact_rate": 0.9080459770114943,
+            "snake_occupancy_iou": 0.9655172413793104
+          },
+          "truth_control": {
+            "cells": 818,
+            "exact": 818,
+            "snake_union": 85,
+            "snake_exact": 85,
+            "snake_both": 85,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 9801,
+            "exact": 9731,
+            "snake_union": 722,
+            "snake_exact": 694,
+            "snake_both": 710,
+            "all_exact_rate": 0.9928578716457505,
+            "snake_exact_rate": 0.961218836565097,
+            "snake_occupancy_iou": 0.9833795013850416
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 78,
+            "snake_union": 5,
+            "snake_exact": 2,
+            "snake_both": 3,
+            "all_exact_rate": 0.9629629629629629,
+            "snake_exact_rate": 0.4,
+            "snake_occupancy_iou": 0.6
+          }
+        },
+        {
+          "seed": 2109,
+          "steps": 60,
+          "views": 180,
+          "death_views": 1,
+          "overlapping_pairs": 159,
+          "consistency": {
+            "cells": 4439,
+            "exact": 4365,
+            "snake_union": 518,
+            "snake_exact": 446,
+            "snake_both": 495,
+            "all_exact_rate": 0.9833295787339491,
+            "snake_exact_rate": 0.861003861003861,
+            "snake_occupancy_iou": 0.9555984555984556
+          },
+          "truth_control": {
+            "cells": 4439,
+            "exact": 4439,
+            "snake_union": 507,
+            "snake_exact": 507,
+            "snake_both": 507,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14467,
+            "snake_union": 1204,
+            "snake_exact": 1124,
+            "snake_both": 1177,
+            "all_exact_rate": 0.9922496570644719,
+            "snake_exact_rate": 0.9335548172757475,
+            "snake_occupancy_iou": 0.9775747508305648
+          },
+          "death_accuracy": {
+            "cells": 81,
+            "exact": 81,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2110,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 152,
+          "consistency": {
+            "cells": 3641,
+            "exact": 3588,
+            "snake_union": 595,
+            "snake_exact": 553,
+            "snake_both": 578,
+            "all_exact_rate": 0.9854435594616864,
+            "snake_exact_rate": 0.9294117647058824,
+            "snake_occupancy_iou": 0.9714285714285714
+          },
+          "truth_control": {
+            "cells": 3641,
+            "exact": 3641,
+            "snake_union": 587,
+            "snake_exact": 587,
+            "snake_both": 587,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14448,
+            "snake_union": 1525,
+            "snake_exact": 1459,
+            "snake_both": 1500,
+            "all_exact_rate": 0.9909465020576131,
+            "snake_exact_rate": 0.9567213114754098,
+            "snake_occupancy_iou": 0.9836065573770492
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        },
+        {
+          "seed": 2111,
+          "steps": 60,
+          "views": 180,
+          "death_views": 0,
+          "overlapping_pairs": 131,
+          "consistency": {
+            "cells": 2780,
+            "exact": 2742,
+            "snake_union": 448,
+            "snake_exact": 415,
+            "snake_both": 433,
+            "all_exact_rate": 0.9863309352517986,
+            "snake_exact_rate": 0.9263392857142857,
+            "snake_occupancy_iou": 0.9665178571428571
+          },
+          "truth_control": {
+            "cells": 2780,
+            "exact": 2780,
+            "snake_union": 436,
+            "snake_exact": 436,
+            "snake_both": 436,
+            "all_exact_rate": 1.0,
+            "snake_exact_rate": 1.0,
+            "snake_occupancy_iou": 1.0
+          },
+          "accuracy": {
+            "cells": 14580,
+            "exact": 14449,
+            "snake_union": 1488,
+            "snake_exact": 1418,
+            "snake_both": 1455,
+            "all_exact_rate": 0.9910150891632373,
+            "snake_exact_rate": 0.9529569892473119,
+            "snake_occupancy_iou": 0.9778225806451613
+          },
+          "death_accuracy": {
+            "cells": 0,
+            "exact": 0,
+            "snake_union": 0,
+            "snake_exact": 0,
+            "snake_both": 0,
+            "all_exact_rate": null,
+            "snake_exact_rate": null,
+            "snake_occupancy_iou": null
+          }
+        }
+      ],
+      "elapsed_seconds": 65.88927870499992
+    }
+  ]
+}

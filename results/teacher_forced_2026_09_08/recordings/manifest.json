@@ -1,0 +1,115 @@
+{
+  "format_version": 1,
+  "metadata": {
+    "environment": {
+      "height": 15,
+      "width": 15,
+      "num_snakes": 3,
+      "num_fruits": 4,
+      "view_radius": 4,
+      "obstacle_density": 0.12,
+      "observation_noise": 2.0,
+      "snake_noise_sigma": 8.0,
+      "noise_period": 3,
+      "background_gradient": 0.0,
+      "gradient_period": 6,
+      "reward_dict": {
+        "fruit": 1.0,
+        "kill": 0.0,
+        "lose": -5.0,
+        "win": 0.0,
+        "time": 0.01
+      }
+    },
+    "search": {
+      "objective": "sum",
+      "num_simulations": 16,
+      "max_depth": 24,
+      "max_joint_actions": 4,
+      "exploration_fraction": 0.0
+    },
+    "policy": "/home/avery/codes/qcwm/marlenv/marlenv/demodata/az_policy.pt",
+    "policy_sha256": "2da2d8af7ac37a72f6d17a0c5c5a10750717a757b45e1c733ab721a4c56d4dcd",
+    "requested_steps": 60,
+    "runtime": {
+      "git_revision": "28283bbb2978ec9df43a3a5e41f1ff14e7b11c0a",
+      "python": "3.14.7",
+      "numpy": "2.5.2",
+      "torch": "2.11.0+cu128"
+    }
+  },
+  "recordings": [
+    {
+      "file": "episode_2100.npz",
+      "sha256": "2b16341be97d021bca556d966d38318209315d8365b29c8b0a1451963d78159b",
+      "seed": 2100,
+      "steps": 60
+    },
+    {
+      "file": "episode_2101.npz",
+      "sha256": "e977dd04a5cccaf08849d0d533ed256e565ba0eaa66cd2037b21297648b8c5cf",
+      "seed": 2101,
+      "steps": 60
+    },
+    {
+      "file": "episode_2102.npz",
+      "sha256": "4c05b7f933e01b92b3f27049971df09c77a064441cffab0ae881e737c5df1b83",
+      "seed": 2102,
+      "steps": 60
+    },
+    {
+      "file": "episode_2103.npz",
+      "sha256": "5e8b042c4019d15c86cba31fef131e2da76d421ec4b13df625a509e026da93bc",
+      "seed": 2103,
+      "steps": 60
+    },
+    {
+      "file": "episode_2104.npz",
+      "sha256": "fb54d383771d9ca3cd3a3edc0ba22f9771a951d7c6ded87783d4ea9d427154f6",
+      "seed": 2104,
+      "steps": 60
+    },
+    {
+      "file": "episode_2105.npz",
+      "sha256": "b2fc2783bfd51b06ded61382173e262eb66ec10e719d077c117316d117fe30dc",
+      "seed": 2105,
+      "steps": 60
+    },
+    {
+      "file": "episode_2106.npz",
+      "sha256": "7cc05e0ba601da239d8337bcd81a6b056c95dc23c20f4a5b346ed60c0100b323",
+      "seed": 2106,
+      "steps": 60
+    },
+    {
+      "file": "episode_2107.npz",
+      "sha256": "7fdd9a0b9749d26268120bf21721552d03d16c4e63900166152e14bf95df6033",
+      "seed": 2107,
+      "steps": 60
+    },
+    {
+      "file": "episode_2108.npz",
+      "sha256": "850d312ce6ed1808f7553ad290506b6f2ae8b33978cacab8b1c55cc8854964ab",
+      "seed": 2108,
+      "steps": 60
+    },
+    {
+      "file": "episode_2109.npz",
+      "sha256": "98ae070bd530c933d9034167437ae2afbb732eeb6bfd2082047ae9783fdf776f",
+      "seed": 2109,
+      "steps": 60
+    },
+    {
+      "file": "episode_2110.npz",
+      "sha256": "d0dcd677b5e79daa2c68a22cd35081dd11261fce5e50a414ef3143c218480233",
+      "seed": 2110,
+      "steps": 60
+    },
+    {
+      "file": "episode_2111.npz",
+      "sha256": "e8b43db4813f04e2853cc2bf2e776cdc2753289678793274c3d91c75a741c596",
+      "seed": 2111,
+      "steps": 60
+    }
+  ]
+}
