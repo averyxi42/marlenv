@@ -1,0 +1,24 @@
+{
+  "source": "rollout_no_obstacles_trio40_b12_dp1_seed0.gif",
+  "output": "rollout_no_obstacles_trio40_b12_dp1_seed0_until_one_alive.gif",
+  "source_sha256": "b596586f9c23962a677d984a8cedcf0eb71924518fef496b0a0f424c33d50518",
+  "output_sha256": "ede2039f27a480ac97fff2eba419d67fac979af3d55757229cb47cff01d3e180",
+  "first_single_survivor_arm": "solo",
+  "cutoff_simulation_step": 44,
+  "cutoff_generated_step": 33,
+  "frames": 34,
+  "duration_ms": 5440,
+  "alive_before_cutoff": {
+    "solo": 2,
+    "ego": 3,
+    "ceiling": 3
+  },
+  "alive_at_cutoff": {
+    "solo": 1,
+    "ego": 3,
+    "ceiling": 3
+  },
+  "retirement_frame_included": true,
+  "all_pixels_and_durations_match_source": true,
+  "method": "Original GIF block prefix plus trailer; no re-encoding or added hold"
+}

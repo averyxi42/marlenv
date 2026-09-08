@@ -34,3 +34,18 @@ policy hashes, correct action ownership and displacement, and no post-death
 records. [Rendering checks](rendering_verification.json) verify exact tile
 colours and paired frame alignment. The accompanying scripts reproduce
 these checks.
+
+## Short consistency comparison
+
+[Slice ending when any rollout first has one snake alive](../../diagrams/rollout_no_obstacles_trio40_b12_dp1_seed0_until_one_alive.gif)
+
+The slice includes generated frames 0–33 (34 frames, 5.44 seconds). At its
+last frame, solo falls from two surviving viewpoints to one; egocentric and
+ceiling still have three each. This is simulation step 44, after the 11 real
+prefix transitions. The original full GIF remains available above.
+
+The slice copies the original GIF blocks through that frame without
+re-encoding, changing timing, or adding a final hold. Every decoded pixel
+and frame duration was checked against the source. See
+[slice metadata](slice_until_one_alive.json) and the accompanying reproduction
+script.
