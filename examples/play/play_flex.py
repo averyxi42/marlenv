@@ -72,6 +72,7 @@ def parse_args():
                         'observation it has never seen')
     p.add_argument('--observation-noise', type=float, default=2.0)
     p.add_argument('--snake-noise', type=float, default=8.0)
+    p.add_argument('--noise-period', type=int, default=8)
     p.add_argument('--obstacle-density', type=float, default=0.12)
     p.add_argument('--record', default=None)
     p.add_argument('--headless', action='store_true')
@@ -94,6 +95,7 @@ class Session:
             reward_dict=REWARD_DICT, view_radius=args.view_radius,
             observation_noise=args.observation_noise,
             snake_noise_sigma=args.snake_noise,
+            noise_period=args.noise_period,
             background_gradient=args.background_gradient,
             obstacle_density=args.obstacle_density,
             snake_colors=args.snake_colors, disable_env_checker=True)
@@ -142,14 +144,15 @@ class Session:
         return [view if i in living else self.last_seen[i]
                 for i, view in enumerate(self.dream())]
 
-    def paint(self, views):
+    def paint(self, views, agents=None):
+        agents = self.living if agents is None else agents
         self.canvas.fade()
-        order = [i for i in self.living if i != self.agent]
-        if self.agent in self.living:
+        order = [i for i in agents if i != self.agent]
+        if self.agent in agents:
             order.append(self.agent)
         for index in order:
             self.canvas.paste(views[index], self.poses[index])
-        for index in self.living:
+        for index in agents:
             self.last_seen[index] = views[index]
 
     def prefill(self, steps, solver):
@@ -157,6 +160,7 @@ class Session:
         for _ in range(steps):
             if not self.alive:
                 break
+            moving = self.living
             _, _, terminated, truncated, _ = self.env.step(
                 solver.solve(self.env))
             self.alive = not (all(terminated) or all(truncated))
@@ -170,7 +174,7 @@ class Session:
                                    dtype=torch.long, device=self.device)
             self.runner.observe(actions, torch.from_numpy(
                 to_model_input(views[None, None])).to(self.device), live)
-            self.paint(views)
+            self.paint(views, moving)
             self.steps += 1
 
     def step(self, cardinal):
@@ -192,7 +196,7 @@ class Session:
             self.poses[index] = make_pose(pose.row + heading.value[0],
                                           pose.col + heading.value[1],
                                           heading)
-        self.paint(self.dream())
+        self.paint(self.dream(), moving)
 
         if self.alive:
             base = self.env.unwrapped

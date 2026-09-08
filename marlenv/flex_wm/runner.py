@@ -52,6 +52,10 @@ class FlexRunner:
         self.start = torch.as_tensor(positions, dtype=torch.long,
                                      device=self.device)
         self.num_agents = len(self.agents)
+        if len(torch.unique(self.agents)) != self.num_agents:
+            raise ValueError("agent identities must be unique")
+        if window is not None and window < 1:
+            raise ValueError("window must be positive")
         self.reset_state()
 
     def reset_state(self):
@@ -88,7 +92,9 @@ class FlexRunner:
             agent=self.agents[index][None],
             time=torch.full((1, count), self.time, dtype=torch.long,
                             device=self.device),
-            position=self.position[index][None])
+            position=self.position[index][None],
+            acted=torch.tensor([[self.live[i] for i in agents]],
+                               dtype=torch.bool, device=self.device))
 
     def _remember(self, frames, agents):
         """Hold the newest observation per agent, ready to report.
@@ -109,7 +115,13 @@ class FlexRunner:
             actions=join(self.pairs.actions, extra.actions),
             agent=join(self.pairs.agent, extra.agent),
             time=join(self.pairs.time, extra.time),
-            position=join(self.pairs.position, extra.position))
+            position=join(self.pairs.position, extra.position),
+            valid=join(self.pairs.valid, extra.valid),
+            trained=join(self.pairs.trained, extra.trained),
+            acted=join(self.pairs.acted, extra.acted),
+            visible=(None if self.pairs.visible is None and extra.visible is None
+                     else join(self.pairs.patch_mask(self.model.tokens_per_frame),
+                               extra.patch_mask(self.model.tokens_per_frame))))
         self.actions_known = join(self.actions_known, known)
         self._trim()
 
@@ -127,26 +139,29 @@ class FlexRunner:
         return torch.linspace(1.0, 0.0, steps + 1, device=self.device)
 
     def _denoise(self, target, steps, generator, frame_slot):
-        """DDIM over one slot, everything else presented as known.
-
-        ``frame_slot`` picks which half is noisy: observations if true,
-        actions if false. The other half sits at noise level zero, which is
-        how the model is told it is looking at something already decided.
-        """
+        """DDIM over targets with clean history and unavailable actions at tau=1."""
         pairs = self.pairs
         clean_actions = actions_to_signal(
             pairs.actions, self.model.action_out.out_features)
 
-        # noise goes only where something is being denoised. Everything else
-        # is history and must be handed over as it stands: filling the whole
-        # tensor with noise would erase the very context the step is
-        # conditioned on
+        # Observations and decided actions stay clean. An unavailable action
+        # stays at maximum noise and is never a prediction target.
+        if frame_slot:
+            # Current actions cannot reach current observations; historical
+            # unavailable actions can, and must carry noise at tau=1.
+            unknown = ~self.actions_known & (pairs.time < self.time)
+            if unknown.any():
+                clean_actions = torch.where(
+                    unknown[..., None],
+                    torch.randn(clean_actions.shape, device=self.device,
+                                generator=generator), clean_actions)
         known = pairs.observations if frame_slot else clean_actions
         spread = target.reshape(*target.shape,
                                 *([1] * (known.dim() - target.dim())))
+        noisy = spread if frame_slot else (~self.actions_known)[..., None]
         content = torch.where(
-            spread, torch.randn(known.shape, device=self.device,
-                                generator=generator), known)
+            noisy, torch.randn(known.shape, device=self.device,
+                               generator=generator), known)
 
         zero = torch.zeros(pairs.batch, pairs.pairs, device=self.device)
         # an action nobody has decided yet is unknown, whatever is written
@@ -177,33 +192,76 @@ class FlexRunner:
                                   content)
         return content
 
+    def _current_slots(self, pairs=None):
+        """Map current pair slots to runner indices through their identities."""
+        pairs = self.pairs if pairs is None else pairs
+        for agent in self.living:
+            slots = torch.nonzero(
+                pairs.valid[0] & (pairs.time[0] == self.time)
+                & (pairs.agent[0] == self.agents[agent]), as_tuple=True)[0]
+            if len(slots) != 1:
+                raise RuntimeError("each live agent needs exactly one current pair")
+            yield int(slots[0]), agent
+
+    def _mark_retired_actions(self):
+        # Keep the death observation, but it has no outgoing action. Do not
+        # change valid/trained: the observation remains real context.
+        for pairs in (self.pairs, getattr(self, 'frontier', None)):
+            if pairs is None:
+                continue
+            dead = torch.zeros_like(pairs.valid)
+            for agent, live in enumerate(self.live):
+                if not live:
+                    dead |= ((pairs.time == self.time)
+                             & (pairs.agent == self.agents[agent]))
+            pairs.acted = pairs.acted & ~dead
+
+    def _record_actions(self, actions):
+        self._mark_retired_actions()
+        for slot, agent in self._current_slots():
+            self.pairs.actions[0, slot] = int(actions[agent])
+            self.actions_known[0, slot] = True
+        frontier = getattr(self, 'frontier', None)
+        if frontier is not None:
+            for slot, agent in self._current_slots(frontier):
+                frontier.actions[0, slot] = int(actions[agent])
+
     @torch.no_grad()
     def sample_actions(self, fixed=None, steps=6, generator=None):
-        """Decide every live agent's action at the current step."""
-        target = ~self.actions_known & self.pairs.valid
-        if not target.any():
-            return torch.zeros(self.num_agents, dtype=torch.long,
-                               device=self.device)
-        signal = self._denoise(target, steps, generator, frame_slot=False)
+        """Decide live agents' current actions; fixed actions condition peers.
 
-        chosen = signal_to_actions(signal)[0]
-        full = torch.zeros(self.num_agents, dtype=torch.long,
-                           device=self.device)
-        slots = torch.nonzero(target[0], as_tuple=True)[0]
-        for slot, agent in zip(slots.tolist(), self.living):
-            full[agent] = chosen[slot]
-        if fixed:
-            for agent, action in fixed.items():
-                if self.live[agent]:
-                    full[agent] = int(action)
-        for slot, agent in zip(slots.tolist(), self.living):
-            self.pairs.actions[0, slot] = full[agent]
-        self.actions_known = self.actions_known | target
+        ``fixed`` keys are runner indices, as in the returned full vector.
+        A repeated call returns already decided actions without resampling.
+        """
+        self._mark_retired_actions()
+        slots = list(self._current_slots())
+        for slot, agent in slots:
+            if fixed and agent in fixed:
+                action = int(fixed[agent])
+                if not 0 <= action < self.model.action_out.out_features:
+                    raise ValueError("fixed action out of range")
+                self.pairs.actions[0, slot] = action
+                self.actions_known[0, slot] = True
+        frontier = getattr(self, 'frontier', None)
+        if frontier is not None:
+            frontier.actions[:] = self.pairs.actions[:, -frontier.pairs:]
+        target = torch.zeros_like(self.actions_known)
+        for slot, _ in slots:
+            target[0, slot] = ~self.actions_known[0, slot]
+        if target.any():
+            signal = self._denoise(target, steps, generator, frame_slot=False)
+            chosen = signal_to_actions(signal)
+            self.pairs.actions[target] = chosen[target]
+        full = torch.zeros(self.num_agents, dtype=torch.long, device=self.device)
+        for slot, agent in slots:
+            full[agent] = self.pairs.actions[0, slot]
+        self._record_actions(full)
         return full
 
     @torch.no_grad()
     def generate_frames(self, actions, steps=12, generator=None):
         """The observations that follow a decided joint action."""
+        self._record_actions(actions)
         moves = torch.tensor([h.value for h in HEADINGS], device=self.device)
         alive = self.living
         if not alive:
@@ -251,6 +309,7 @@ class FlexRunner:
                                   if bool(seen[slot]) else 0)
             if self.misses[agent] >= self.death_patience:
                 self.live[agent] = False
+        self._mark_retired_actions()
 
     # ---------------------------------------------------- rectangular view
     @property
@@ -262,9 +321,8 @@ class FlexRunner:
     def frames(self):
         """``(1, 1, n, v, v, c)`` of the newest observation per agent.
 
-        A report, not the representation. A retired agent has no recent
-        pair, so its slot keeps the last observation it did have; nothing
-        downstream should read those, and the alive flags say which.
+        A display snapshot, not context: retired slots retain the single
+        final observation. No new pairs are made from these stale slots.
         """
         return self.latest
 
@@ -280,28 +338,32 @@ class FlexRunner:
         The same route into the history a generated step takes, so a prefix
         of real play and the rollout after it are indistinguishable.
         """
-        target = ~self.actions_known & self.pairs.valid
-        slots = torch.nonzero(target[0], as_tuple=True)[0]
-        for slot, agent in zip(slots.tolist(), self.living):
-            self.pairs.actions[0, slot] = int(actions[agent])
-        self.actions_known = self.actions_known | target
-
-        moves = torch.tensor([h.value for h in HEADINGS], device=self.device)
-        for agent in self.living:
-            self.position[agent] = self.position[agent] + moves[
-                int(actions[agent])]
-        self.time += 1
-
-        if live is not None:
-            for agent in range(self.num_agents):
-                if not bool(live[agent]):
-                    self.live[agent] = False
-        alive = self.living
-        if not alive:
+        moving = self.living
+        if not moving:
+            self.time += 1
             return
-        extra = self._new_pairs(frames[:, 0], alive)
-        self._append(extra, torch.zeros(1, len(alive), dtype=torch.bool,
-                                        device=self.device), alive)
+        self._record_actions(actions)
+        self._commit_observed_actions()
+        moves = torch.tensor([h.value for h in HEADINGS], device=self.device)
+        for agent in moving:
+            self.position[agent] += moves[int(actions[agent])]
+        self.time += 1
+        if live is not None:
+            self.live = [was_live and bool(live[i])
+                         for i, was_live in enumerate(self.live)]
+        self.misses = [0] * self.num_agents
+        # Everyone who took the action has an aftermath observation, even
+        # if that action killed them. Only subsequent pairs are omitted.
+        extra = self._new_pairs(frames[:, 0], moving)
+        self._append(extra, torch.zeros(1, len(moving), dtype=torch.bool,
+                                       device=self.device), moving)
+        self._set_frontier(extra)
+
+    def _commit_observed_actions(self):
+        pass
+
+    def _set_frontier(self, pairs):
+        pass
 
     def step(self, fixed=None, denoise_steps=12, action_steps=4,
              generator=None):
@@ -340,16 +402,11 @@ class CachedFlexRunner(FlexRunner):
         self.cache.reset()
         self.frontier = self.pairs
 
-    def _frontier_slice(self):
-        """The pairs at the frontier, as their own batch."""
-        count = self.frontier.pairs
-        return self.frontier, count
-
     def _zero(self, count):
         return torch.zeros(1, count, device=self.device)
 
     @torch.no_grad()
-    def _commit_frontier(self):
+    def _commit_frontier(self, generator=None):
         """Encode the finished frontier into the cache, once."""
         if self.frontier is None or self.frontier.pairs == 0:
             return
@@ -357,60 +414,67 @@ class CachedFlexRunner(FlexRunner):
         signal = actions_to_signal(pairs.actions,
                                    self.model.action_out.out_features)
         zero = self._zero(pairs.pairs)
+        known = self.actions_known[:, -pairs.pairs:]
+        if not known.all():
+            signal = torch.where(known[..., None], signal,
+                                 torch.randn(signal.shape, device=self.device,
+                                             generator=generator))
         self.model.forward_cached(pairs, pairs.observations, signal, zero,
-                                  zero, self.cache, window=self.window,
+                                  (~known).float(), self.cache, window=self.window,
                                   record=True)
         if self.window is not None:
             self.cache.trim(self.time - self.window + 1)
         self.frontier = None
 
-    @torch.no_grad()
-    def sample_actions(self, fixed=None, steps=6, generator=None):
-        pairs = self.frontier
-        if pairs is None or pairs.pairs == 0:
-            return torch.zeros(self.num_agents, dtype=torch.long,
-                               device=self.device)
-        width = self.model.action_out.out_features
-        signal = torch.randn(1, pairs.pairs, width, device=self.device,
-                             generator=generator)
-        zero = self._zero(pairs.pairs)
-        levels = self._levels(steps)
+    def _commit_observed_actions(self):
+        self._commit_frontier()
 
+    def _set_frontier(self, pairs):
+        self.frontier = pairs
+
+    def _denoise(self, target, steps, generator, frame_slot):
+        # Action sampling shares the base runner's identity bookkeeping.
+        # Only the current frontier needs repeated model evaluation here.
+        assert not frame_slot
+        pairs = self.frontier
+        count = pairs.pairs
+        target = target[:, -count:]
+        known = self.actions_known[:, -count:]
+        clean_signal = actions_to_signal(pairs.actions,
+                                         self.model.action_out.out_features)
+        signal = torch.where(known[..., None], clean_signal,
+                             torch.randn(clean_signal.shape, device=self.device,
+                                         generator=generator))
+        zero = self._zero(count)
+        levels = self._levels(steps)
         for index in range(steps):
             level = float(levels[index])
+            tau = torch.where(target, torch.full_like(zero, level),
+                              (~known).float())
             _, predicted = self.model.forward_cached(
-                pairs, pairs.observations, signal, zero,
-                torch.full_like(zero, level), self.cache,
+                pairs, pairs.observations, signal, zero, tau, self.cache,
                 window=self.window)
             clean, noise = from_velocity(signal, predicted,
                                          torch.full_like(zero, level))
             alpha, sigma = alpha_sigma(levels[index + 1])
-            signal = alpha * clean.clamp(-1.0, 1.0) + sigma * noise
-
-        chosen = signal_to_actions(signal)[0]
-        full = torch.zeros(self.num_agents, dtype=torch.long,
-                           device=self.device)
-        for slot, agent in enumerate(self.living):
-            full[agent] = chosen[slot]
-        if fixed:
-            for agent, action in fixed.items():
-                if self.live[agent]:
-                    full[agent] = int(action)
-        for slot, agent in enumerate(self.living):
-            self.frontier.actions[0, slot] = full[agent]
-            self.pairs.actions[0, -self.frontier.pairs + slot] = full[agent]
-        self.actions_known[0, -self.frontier.pairs:] = True
+            signal = torch.where(target[..., None],
+                                 alpha * clean.clamp(-1.0, 1.0) + sigma * noise,
+                                 signal)
+        full = actions_to_signal(self.pairs.actions,
+                                 self.model.action_out.out_features)
+        full[:, -count:] = signal
         return full
 
     @torch.no_grad()
     def generate_frames(self, actions, steps=12, generator=None):
-        self._commit_frontier()
-
-        moves = torch.tensor([h.value for h in HEADINGS], device=self.device)
         alive = self.living
         if not alive:
             self.time += 1
             return self.pairs.observations[:, :0], alive
+        self._record_actions(actions)
+        self._commit_frontier(generator)
+
+        moves = torch.tensor([h.value for h in HEADINGS], device=self.device)
         for agent in alive:
             self.position[agent] = self.position[agent] + moves[
                 actions[agent]]
@@ -446,39 +510,3 @@ class CachedFlexRunner(FlexRunner):
                                         device=self.device), alive)
         self.frontier = fresh
         return content, alive
-
-    @torch.no_grad()
-    def observe(self, actions, frames, live=None):
-        """Absorb a real transition, committing the frontier as it goes.
-
-        There may be no frontier to close: once every agent has been
-        retired nothing new was opened, and a caller feeding real steps in
-        should not have to know that.
-        """
-        if self.frontier is None:
-            self.time += 1
-            return
-        for slot, agent in enumerate(self.living):
-            self.frontier.actions[0, slot] = int(actions[agent])
-            self.pairs.actions[0, -self.frontier.pairs + slot] = int(
-                actions[agent])
-        self.actions_known[0, -self.frontier.pairs:] = True
-        self._commit_frontier()
-
-        moves = torch.tensor([h.value for h in HEADINGS], device=self.device)
-        for agent in self.living:
-            self.position[agent] = self.position[agent] + moves[
-                int(actions[agent])]
-        self.time += 1
-
-        if live is not None:
-            for agent in range(self.num_agents):
-                if not bool(live[agent]):
-                    self.live[agent] = False
-        alive = self.living
-        if not alive:
-            return
-        fresh = self._new_pairs(frames[:, 0], alive)
-        self._append(fresh, torch.zeros(1, len(alive), dtype=torch.bool,
-                                        device=self.device), alive)
-        self.frontier = fresh

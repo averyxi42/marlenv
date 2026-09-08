@@ -70,7 +70,7 @@ checkpoint:
 python examples/play/rollout_flex.py \
     --model marlenv/demodata/<run>/model_step12000.pt \
     --checkpoint marlenv/demodata/az_policy.pt \
-    --background-gradient 0 \
+    --background-gradient 0 --noise-period 3 \
     --steps 240 --bootstrap 12 --seed 0 \
     --out diagrams/<name>.gif
 ```
@@ -81,3 +81,7 @@ on the gradient-free sets, or it is shown a gradient it has never seen.
 prefix comes from random rollouts, which survive but rarely eat, handing the
 model a short-snaked history unlike its training data. The same `--seed`
 gives both models the same board and the same prefix.
+
+The corrected rollout semantics and artifact sidecars are documented in
+[rollout_notes.md](../examples/play/rollout_notes.md). New recordings carry
+actual prefix hashes, rather than relying only on equal seed arguments.

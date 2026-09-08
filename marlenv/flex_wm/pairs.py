@@ -151,7 +151,8 @@ def compact(pairs, keep):
         position=take(pairs.position),
         valid=live,
         trained=take(pairs.trained) & live,
-        acted=take(pairs.acted) & live)
+        acted=take(pairs.acted) & live,
+        visible=None if pairs.visible is None else take(pairs.visible))
 
 
 def token_attributes(pairs, tokens_per_frame):

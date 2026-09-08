@@ -69,10 +69,10 @@ class Showreel:
         return [to_pixels(frame.cpu().numpy())
                 for frame in self.runner.frames[0, -1]]
 
-    def paint(self, views):
-        """Age the canvas once, then lay every living view onto it."""
+    def paint(self, views, agents=None):
+        """Paint the agents that produced these views, including new deaths."""
         self.canvas.fade()
-        for index in self.living:
+        for index in self.living if agents is None else agents:
             self.canvas.paste(views[index], self.poses[index])
 
     def bootstrap(self, steps, solver):
@@ -81,6 +81,7 @@ class Showreel:
 
         base = self.env.unwrapped
         for _ in range(steps):
+            moving = self.living
             _, _, terminated, truncated, _ = self.env.step(
                 solver.solve(self.env))
             self.headings = [s.direction for s in base.snakes]
@@ -94,8 +95,8 @@ class Showreel:
             self.runner.observe(actions, torch.from_numpy(
                 to_model_input(views[None, None])).to(self.runner.device),
                 live)
-            self.remember(views)
-            self.paint(views)
+            self.remember(views, moving)
+            self.paint(views, moving)
             self.steps += 1
             if all(terminated) or all(truncated):
                 break
@@ -113,8 +114,8 @@ class Showreel:
             self.poses[index] = make_pose(pose.row + heading.value[0],
                                           pose.col + heading.value[1], heading)
         dreamt = self.dream()
-        self.paint(dreamt)
-        self.remember(dreamt)
+        self.paint(dreamt, moving)
+        self.remember(dreamt, moving)
         self.steps += 1
         return actions
 
@@ -127,8 +128,8 @@ class Showreel:
             views = [snap_to_palette(view, PALETTE_SNAKES) for view in views]
         return views
 
-    def remember(self, views):
-        for index in self.living:
+    def remember(self, views, agents=None):
+        for index in self.living if agents is None else agents:
             self.last_seen[index] = views[index]
 
 
