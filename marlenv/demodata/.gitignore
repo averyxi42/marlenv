@@ -2,3 +2,31 @@
 *
 !.gitignore
 !README.md
+
+# the checkpoints behind the reported numbers are kept, one per run, with
+# the loss curve beside it. Intermediate checkpoints are not: they are
+# large, and nothing in the write-up rests on them.
+!flex_solo/
+!flex_ego/
+!flex_nograd/
+!flex_solo_deaths/
+!flex_ego_deaths/
+!flex_nograd_warm/
+flex_solo/*
+flex_ego/*
+flex_nograd/*
+flex_solo_deaths/*
+flex_ego_deaths/*
+flex_nograd_warm/*
+!flex_solo/model_step24000.pt
+!flex_ego/model_step24000.pt
+!flex_nograd/model_step24000.pt
+!flex_solo_deaths/model_step16000.pt
+!flex_ego_deaths/model_step16000.pt
+!flex_nograd_warm/model_step16000.pt
+!flex_solo/history.json
+!flex_ego/history.json
+!flex_nograd/history.json
+!flex_solo_deaths/history.json
+!flex_ego_deaths/history.json
+!flex_nograd_warm/history.json

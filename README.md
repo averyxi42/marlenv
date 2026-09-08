@@ -290,6 +290,128 @@ The ceiling also trained on the fatal actions the collector was recording
 wrongly at the time, in both of its runs. Comparisons against it that turn
 on how an agent dies are not fair and are not made here.
 
+#### Reproducing it
+
+The six checkpoints behind the numbers above are in the repository, one per
+run, with the loss curve beside each. The datasets are not: they rebuild
+exactly from a seed, and the seed is fixed by the preset rather than passed
+in, so the commands below give byte-identical sets. Expect a few hours per
+training run on one GPU.
+
+Collect the two gradient-free sets. The gradient is off because the
+geometric embedding is meant to carry the spatial work unaided:
+
+```bash
+CK=marlenv/demodata/az_policy.pt
+python examples/data/collect_dataset.py --preset expert  --episodes 1200 \
+    --max-steps 160 --workers 20 --checkpoint $CK --background-gradient 0 \
+    --out marlenv/demodata/expert_nogradient
+python examples/data/collect_dataset.py --preset explore --episodes 1500 \
+    --max-steps 160 --workers 20 --checkpoint $CK --background-gradient 0 \
+    --out marlenv/demodata/explore_nogradient
+```
+
+Everything else is the collector's default: a 15x15 board, three snakes,
+view radius 4, 12% obstacles, observation noise 2.0, snake noise 8.0. The
+sets used here were collected while the fatal-action bug described in
+`marlenv/demodata/README.md` was live and were repaired afterwards; a
+collection run today is correct from the start and needs no patching.
+
+Train the three arms. They differ in one flag and where they are written:
+
+```bash
+COMMON="--components expert_nogradient explore_nogradient \
+        --action-weight 0.025 0 --action-dropout 0.5 1 \
+        --context 80 --window 48 --steps 24000"
+python examples/train/train_flex_wam.py $COMMON --solo \
+    --out marlenv/demodata/flex_solo
+python examples/train/train_flex_wam.py $COMMON --egocentric \
+    --out marlenv/demodata/flex_ego
+python examples/train/train_flex_wam.py $COMMON \
+    --out marlenv/demodata/flex_nograd
+```
+
+Then warm start each for a further 16000 steps at a third the rate. Keep
+`--seed 0`: the seed picks the train and validation split as well as the
+viewpoints, so changing it moves held-out episodes into training and
+quietly spoils the validation curve across the pair of runs.
+
+```bash
+WARM="--components expert_nogradient explore_nogradient \
+      --action-weight 0.025 0 --action-dropout 0.5 1 \
+      --context 80 --window 48 --steps 16000 --lr 1e-4 --seed 0"
+python examples/train/train_flex_wam.py $WARM --solo \
+    --init marlenv/demodata/flex_solo/model_step24000.pt \
+    --out marlenv/demodata/flex_solo_deaths
+python examples/train/train_flex_wam.py $WARM --egocentric \
+    --init marlenv/demodata/flex_ego/model_step24000.pt \
+    --out marlenv/demodata/flex_ego_deaths
+python examples/train/train_flex_wam.py $WARM \
+    --init marlenv/demodata/flex_nograd/model_step24000.pt \
+    --out marlenv/demodata/flex_nograd_warm
+```
+
+The two single-record arms gain the observer's death frames here as well as
+the extra steps; the ceiling gains only the steps, since the rectangular
+path always kept them. `--drop-death-frames` reproduces the earlier
+behaviour and is a no-op outside `--egocentric`.
+
+Score them. Both harnesses take several checkpoints at once and both are
+deterministic under a seed, so an arm measured alone is comparable with one
+measured in a batch:
+
+```bash
+M="marlenv/demodata/flex_solo_deaths/model_step16000.pt \
+   marlenv/demodata/flex_ego_deaths/model_step16000.pt \
+   marlenv/demodata/flex_nograd_warm/model_step16000.pt"
+python examples/analysis/grade_ratchet.py --models $M \
+    --names solo ego ceiling --policy $CK --background-gradient 0 \
+    --steps 80 --episodes 18 --seed 4400
+python examples/analysis/grade_consistency.py --models $M \
+    --names solo ego ceiling --policy $CK --background-gradient 0 \
+    --steps 60 --episodes 12 --seed 2100
+```
+
+And record them -- one rollout per arm, then tile. Gifs are not kept in the
+repository:
+
+```bash
+for arm in flex_solo_deaths flex_ego_deaths; do
+  python examples/play/rollout_flex.py --checkpoint $CK \
+      --model marlenv/demodata/$arm/model_step16000.pt \
+      --background-gradient 0 --death-patience 1 \
+      --steps 240 --bootstrap 12 --seed 0 --out diagrams/$arm.gif
+done   # and flex_nograd_warm the same way
+python diagram_gen/tile_rollouts.py \
+    --gifs diagrams/flex_solo_deaths.gif diagrams/flex_ego_deaths.gif \
+           diagrams/flex_nograd_warm.gif \
+    --labels "one agent's record" "others deduced" "every agent's record" \
+    --out diagrams/trio.gif
+```
+
+##### Settings that decide the answer
+
+Three flags change which model looks best and none is recorded in a
+checkpoint, so each has to be passed deliberately every time.
+
+`--background-gradient` defaults to 16.0 and must be `0` for models trained
+on the gradient-free sets, or they are shown a board unlike anything in
+their training data.
+
+`--death-patience` is how many consecutive frames an agent's own view may
+lack a head at its centre before it is retired. At the default of 3, and at
+2, every arm survives all 240 steps and three quite different models look
+equally healthy. Only at 1 do they separate, and then by a lot.
+
+`--bootstrap` is how many real frames a model is handed before it takes
+over, and it **reverses the ranking**. With 12 real frames the egocentric
+model is the only arm to survive 240 steps while the ceiling dies at 204;
+with a single frame the egocentric model dies at 56 and the ceiling
+survives all 240. Note that `--bootstrap 0` and `--bootstrap 1` mean the
+same thing, since the count includes the frame the rollout starts from. An
+advantage measured at one setting is not an advantage, and a survival
+number quoted without its bootstrap and its patience says nothing.
+
 ### Growing a trained model deeper
 
 Depth is what closed the gap to the single agent model, and it does not

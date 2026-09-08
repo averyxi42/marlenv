@@ -79,6 +79,18 @@ to reproduce.
 | `az_policy.pt` | AlphaZero network. Drives data collection, and the searched prefix a world model rollout is bootstrapped with. |
 | `wm_ctx48/model.pt` | Single agent world model, context 48. The baseline every multi-agent number is compared against. |
 | `wam_deep/model_step8000.pt` | Multi agent world *action* model, 12 blocks. Diffuses actions alongside frames, so it can be rolled out with several agents. |
+| `flex_solo/model_step24000.pt` | Baseline arm: one agent's record, no second agent ever seen. |
+| `flex_ego/model_step24000.pt` | Egocentric arm: one agent's record, the others recovered while in view. |
+| `flex_nograd/model_step24000.pt` | Ceiling arm: every agent's record, nothing deduced. |
+| `flex_solo_deaths/model_step16000.pt` | The baseline warm started 16000 further steps, with death frames. |
+| `flex_ego_deaths/model_step16000.pt` | The egocentric arm warm started the same way. |
+| `flex_nograd_warm/model_step16000.pt` | The ceiling warm started: extra steps only, it always had death frames. |
+
+The last six are the arms of the egocentric experiment, one checkpoint per
+run with its loss curve beside it. Intermediate checkpoints are left out --
+they are large and nothing rests on them. What each run was and how to
+repeat it is in the top-level README, under *Learning a multi-agent model
+from one agent's record*.
 
 Scored on next-frame prediction from clean history, split by cell type,
 which is the comparison that matters -- an aggregate over all pixels is
