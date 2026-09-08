@@ -1,0 +1,38 @@
+{
+  "checks": [
+    {
+      "gif": "rollout_corrected_ceiling24_b12_dp1_seed0.gif",
+      "exact_tile_cells": 17496
+    },
+    {
+      "gif": "rollout_corrected_ceiling40_b12_dp1_seed0.gif",
+      "exact_tile_cells": 15309
+    },
+    {
+      "gif": "rollout_corrected_ego24_b12_dp1_seed0.gif",
+      "exact_tile_cells": 58563
+    },
+    {
+      "gif": "rollout_corrected_ego40_b12_dp1_seed0.gif",
+      "exact_tile_cells": 36450
+    },
+    {
+      "gif": "rollout_corrected_solo24_b12_dp1_seed0.gif",
+      "exact_tile_cells": 58563
+    },
+    {
+      "gif": "rollout_corrected_solo40_b12_dp1_seed0.gif",
+      "exact_tile_cells": 33048
+    },
+    {
+      "gif": "rollout_corrected_trio24_b12_dp1_seed0.gif",
+      "exact_active_panels": true,
+      "frames": 241
+    },
+    {
+      "gif": "rollout_corrected_trio40_b12_dp1_seed0.gif",
+      "exact_active_panels": true,
+      "frames": 150
+    }
+  ]
+}

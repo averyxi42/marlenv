@@ -1,0 +1,84 @@
+{
+  "checks": [
+    {
+      "label": "solo24",
+      "generated_steps": 240,
+      "emitted_rows": 566,
+      "retirement_step": {
+        "0": null,
+        "1": 149,
+        "2": 163
+      },
+      "prefix_sha256": "797d89345de5c3e3e15e6c38e544fc26176dcbb106b95cf91fb592dd4faed169",
+      "code_commit": "495ab0cc61875a88e0447aa35e8157f1fe5b8692"
+    },
+    {
+      "label": "ego24",
+      "generated_steps": 240,
+      "emitted_rows": 430,
+      "retirement_step": {
+        "0": 99,
+        "1": null,
+        "2": 77
+      },
+      "prefix_sha256": "797d89345de5c3e3e15e6c38e544fc26176dcbb106b95cf91fb592dd4faed169",
+      "code_commit": "495ab0cc61875a88e0447aa35e8157f1fe5b8692"
+    },
+    {
+      "label": "ceiling24",
+      "generated_steps": 71,
+      "emitted_rows": 121,
+      "retirement_step": {
+        "0": 82,
+        "1": 16,
+        "2": 20
+      },
+      "prefix_sha256": "797d89345de5c3e3e15e6c38e544fc26176dcbb106b95cf91fb592dd4faed169",
+      "code_commit": "495ab0cc61875a88e0447aa35e8157f1fe5b8692"
+    },
+    {
+      "label": "solo40",
+      "generated_steps": 135,
+      "emitted_rows": 246,
+      "retirement_step": {
+        "0": 57,
+        "1": 40,
+        "2": 146
+      },
+      "prefix_sha256": "797d89345de5c3e3e15e6c38e544fc26176dcbb106b95cf91fb592dd4faed169",
+      "code_commit": "495ab0cc61875a88e0447aa35e8157f1fe5b8692"
+    },
+    {
+      "label": "ego40",
+      "generated_steps": 149,
+      "emitted_rows": 206,
+      "retirement_step": {
+        "0": 26,
+        "1": 160,
+        "2": 17
+      },
+      "prefix_sha256": "797d89345de5c3e3e15e6c38e544fc26176dcbb106b95cf91fb592dd4faed169",
+      "code_commit": "495ab0cc61875a88e0447aa35e8157f1fe5b8692"
+    },
+    {
+      "label": "ceiling40",
+      "generated_steps": 62,
+      "emitted_rows": 180,
+      "retirement_step": {
+        "0": 73,
+        "1": 73,
+        "2": 31
+      },
+      "prefix_sha256": "797d89345de5c3e3e15e6c38e544fc26176dcbb106b95cf91fb592dd4faed169",
+      "code_commit": "495ab0cc61875a88e0447aa35e8157f1fe5b8692"
+    }
+  ],
+  "verified": [
+    "All six actual prefixes and initial GIF frames identical",
+    "Each agent has one contiguous sequence of emitted observations",
+    "Every recorded move equals its own outgoing action, including fatal moves",
+    "No rows or actions follow a death; no repeated death observations",
+    "GIF/trajectory hashes and frame counts match metadata",
+    "All runs use committed, unmodified source"
+  ]
+}
