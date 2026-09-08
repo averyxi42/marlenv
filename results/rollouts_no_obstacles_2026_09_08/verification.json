@@ -1,0 +1,49 @@
+{
+  "checks": [
+    {
+      "label": "solo40",
+      "generated_steps": 131,
+      "emitted_rows": 203,
+      "retirement_step": {
+        "0": 142,
+        "1": 14,
+        "2": 44
+      },
+      "prefix_sha256": "3c17b390ba0f381437a55afe9fcf9a49069e48ec5db24f330d66be49abc616d7",
+      "code_commit": "3937b246248ab2159aed7cb224ecbb87ecd457e1"
+    },
+    {
+      "label": "ego40",
+      "generated_steps": 240,
+      "emitted_rows": 514,
+      "retirement_step": {
+        "0": 183,
+        "1": null,
+        "2": 77
+      },
+      "prefix_sha256": "3c17b390ba0f381437a55afe9fcf9a49069e48ec5db24f330d66be49abc616d7",
+      "code_commit": "3937b246248ab2159aed7cb224ecbb87ecd457e1"
+    },
+    {
+      "label": "ceiling40",
+      "generated_steps": 240,
+      "emitted_rows": 598,
+      "retirement_step": {
+        "0": null,
+        "1": null,
+        "2": 93
+      },
+      "prefix_sha256": "3c17b390ba0f381437a55afe9fcf9a49069e48ec5db24f330d66be49abc616d7",
+      "code_commit": "3937b246248ab2159aed7cb224ecbb87ecd457e1"
+    }
+  ],
+  "verified": [
+    "Only obstacle density and output paths differ from the prior 40k runs; checkpoint and policy hashes match",
+    "All three actual prefixes and initial GIF frames identical",
+    "Each agent has one contiguous sequence of emitted observations",
+    "Every recorded move equals its own outgoing action, including fatal moves",
+    "No rows or actions follow a death; no repeated death observations",
+    "GIF/trajectory hashes and frame counts match metadata",
+    "All runs use committed, unmodified source"
+  ]
+}

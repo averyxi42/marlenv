@@ -1,0 +1,21 @@
+{
+  "checks": [
+    {
+      "gif": "rollout_no_obstacles_ceiling40_b12_dp1_seed0.gif",
+      "exact_tile_cells": 58563
+    },
+    {
+      "gif": "rollout_no_obstacles_ego40_b12_dp1_seed0.gif",
+      "exact_tile_cells": 58563
+    },
+    {
+      "gif": "rollout_no_obstacles_solo40_b12_dp1_seed0.gif",
+      "exact_tile_cells": 32076
+    },
+    {
+      "gif": "rollout_no_obstacles_trio40_b12_dp1_seed0.gif",
+      "exact_active_panels": true,
+      "frames": 241
+    }
+  ]
+}
