@@ -113,6 +113,9 @@ saved_models
 # the showcase is documentation: those recordings are meant to be
 # looked at, so they are kept even though everything else gif is not
 !showcase/*.gif
+# diagrams are documentation too: the rollouts a written-up number refers
+# to, and the tilings that compare them. They cost hours of GPU to redo
+!diagrams/*.gif
 tmp/
 
 # pickle files and pt files (for now)

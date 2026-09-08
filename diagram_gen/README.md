@@ -2,7 +2,13 @@
 
 Scripts that draw the pictures used to explain what this repository does.
 Generated images go in `diagrams/` at the top level, never next to the code
-that made them.
+that made them, and they are kept: they are the rollouts the written-up
+numbers refer to, and each costs a GPU rollout to redo.
+
+Names carry the settings that change what a rollout shows, because none of
+them is recorded in the file: `_dp1` is `--death-patience 1`, `_b1` is
+`--bootstrap 1`, and anything without a `_b` suffix used the default
+bootstrap of 12. A gif named for neither is a rollout at the defaults.
 
 Each script picks its own subject matter rather than taking one on the
 command line, because a hand-picked example is an argument and a searched
