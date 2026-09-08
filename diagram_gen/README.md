@@ -56,9 +56,10 @@ The sources are left alone; this writes a third file. Where one rollout ends
 early its last frame is held, greyed and marked, rather than looping back to
 the start -- a loop reads as the rollout continuing, and a bright still
 picture beside a moving one reads as one that happens to be sitting quiet.
-All frames share a single palette, because per-frame adaptive palettes make
-the captions -- identical pixels every frame -- speckle as the text colour
-lands on a different entry each time.
+All frames share a palette that reserves every Snake class colour and the
+caption colours. Both source and tiled GIFs use exact RGB-to-palette lookup;
+a colour disappearing halfway through a rollout cannot change its identity
+in earlier frames. Remaining palette entries approximate the fading canvas.
 
 ### Making the rollouts comparable
 

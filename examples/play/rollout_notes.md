@@ -48,3 +48,8 @@ Matching prefix hashes verify that the models started from identical data.
 Matching diffusion seeds give paired initial randomness; after populations
 or trajectory lengths diverge, they need not consume corresponding draws.
 These are autonomous qualitative examples, not the teacher-forced instrument.
+
+GIF export preserves the exact class colours in live and dimmed viewpoint
+tiles. The stitched canvas contains noisy and faded RGB values and is
+approximated by the remaining fixed palette entries. Palette selection does
+not depend on which colours happen to survive until a middle frame.

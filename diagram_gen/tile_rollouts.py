@@ -108,6 +108,11 @@ def font_for(size):
     return ImageFont.load_default()
 
 
+def rollout_palette():
+    from marlenv.wm.showreel import gif_palette
+    return gif_palette([BACKDROP, INK, MUTED, RULE])
+
+
 def main():
     args = parse_args()
     panels = [read_gif(path) for path in args.gifs]
@@ -157,14 +162,11 @@ def main():
         merged.append(frame)
     timings = pacing([ms for _, ms in panels], length)
 
-    # one palette for the whole gif: left to itself PIL picks a fresh
-    # adaptive palette per frame, and the captions -- identical pixels
-    # every frame -- come out speckled as the text colour lands on a
-    # different entry each time
-    shared = merged[len(merged) // 2].quantize(colors=256,
-                                               method=Image.MEDIANCUT)
-    merged = [frame.quantize(palette=shared, dither=Image.Dither.NONE)
-              for frame in merged]
+    # A fixed palette preserves class identity even when a colour vanishes
+    # before the middle frame, and keeps captions stable across recordings.
+    shared = rollout_palette()
+    from marlenv.wm.showreel import quantize_gif
+    merged = [quantize_gif(frame, shared) for frame in merged]
 
     os.makedirs(os.path.dirname(args.out) or '.', exist_ok=True)
     merged[0].save(args.out, save_all=True, append_images=merged[1:],

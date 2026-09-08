@@ -190,6 +190,53 @@ def compose(reel, canvas_scale=22, tile_scale=14, gap=10, margin=14):
     return sheet
 
 
+def gif_palette(reserved=()):
+    """Reserve Snake classes and UI colours; fill with shades and a RGB grid.
+
+    Sampling a single frame's colours can turn an earlier orange snake red
+    when the orange snake has disappeared by that frame. Keeping semantic
+    colours exact matters more here than fitting the fading canvas perfectly.
+    """
+    from itertools import product
+    from marlenv.core.palette import palette_entries
+    from PIL import Image
+
+    _, cells = palette_entries(6)
+    colours = [BACKDROP, INK, MUTED, *reserved]
+    colours += [tuple(int(c * factor) for c in colour)
+                for factor in (1.0, 0.3, 0.6, 0.12) for colour in cells]
+    colours += [(v, v, v) for v in range(0, 256, 8)]
+    colours += list(product((0, 64, 128, 192, 255), repeat=3))
+    colours = list(dict.fromkeys(colours))
+    assert len(colours) <= 256
+    colours += [(0, 0, 0)] * (256 - len(colours))
+    palette = Image.new('P', (1, 1))
+    palette.putpalette([channel for colour in colours for channel in colour])
+    return palette
+
+
+def quantize_gif(image, palette):
+    """Nearest palette colour without Pillow's reduced-precision RGB lookup.
+
+    Pillow's palette quantizer can merge distinct reserved colours. Work on
+    unique RGB values so exact class colours stay exact, including dark tiles.
+    """
+    from PIL import Image
+    rgb = np.asarray(image.convert('RGB'), dtype=np.uint32)
+    packed = (rgb[..., 0] << 16) | (rgb[..., 1] << 8) | rgb[..., 2]
+    unique, inverse = np.unique(packed.ravel(), return_inverse=True)
+    colours = np.stack([unique >> 16, (unique >> 8) & 255, unique & 255],
+                       axis=-1).astype(np.int32)
+    table = np.array(palette.getpalette(), dtype=np.int32).reshape(-1, 3)
+    nearest = np.empty(len(colours), dtype=np.uint8)
+    for start in range(0, len(colours), 1024):
+        distance = ((colours[start:start + 1024, None] - table) ** 2).sum(-1)
+        nearest[start:start + 1024] = distance.argmin(-1)
+    result = Image.fromarray(nearest[inverse].reshape(rgb.shape[:2]))
+    result.putpalette(palette.getpalette())
+    return result
+
+
 def save(frames, path, duration=160, hold=1200):
     """Write the recorded frames out as a gif.
 
@@ -203,7 +250,8 @@ def save(frames, path, duration=160, hold=1200):
     if not frames:
         raise ValueError('nothing recorded')
     os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-    images = [Image.fromarray(frame) for frame in frames]
+    palette = gif_palette()
+    images = [quantize_gif(Image.fromarray(frame), palette) for frame in frames]
     timing = [duration] * len(images)
     timing[-1] = hold
     images[0].save(path, save_all=True, append_images=images[1:],
